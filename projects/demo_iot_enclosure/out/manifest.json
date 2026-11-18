@@ -1,0 +1,311 @@
+{
+  "part_name": "demo_iot_enclosure",
+  "mode": "fdm",
+  "elapsed_sec": 18.59,
+  "files": {
+    "script": "projects/demo_iot_enclosure/part.py",
+    "step": "projects/demo_iot_enclosure/out/demo_iot_enclosure.step",
+    "stl": "projects/demo_iot_enclosure/out/demo_iot_enclosure.stl",
+    "preview_sheet_png": "projects/demo_iot_enclosure/out/preview_sheet.png",
+    "diff_sheet_png": null,
+    "viewer_html": "projects/demo_iot_enclosure/out/viewer.html",
+    "dxf": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy.dxf",
+    "svg": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy.svg",
+    "drawing_2d_png": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy_2d.png"
+  },
+  "params": {
+    "outer_x": 86.0,
+    "outer_y": 58.0,
+    "bottom_h": 22.0,
+    "lid_h": 8.0,
+    "wall_t": 2.8,
+    "corner_r": 5.0,
+    "flange_ears": true,
+    "vent_slots": 5,
+    "usb_c_z": 11.0,
+    "layout": "print_plate"
+  },
+  "registry": {
+    "part_name": "demo_iot_enclosure",
+    "mode": "fdm",
+    "description": "demo_iot_enclosure 上下分体电子控制盒",
+    "reference_files": [],
+    "notes": [],
+    "anchors": [
+      {
+        "id": "E1",
+        "pos": [
+          -48.72,
+          0.0,
+          3.6
+        ],
+        "desc": "左侧挂墙腰型耳孔",
+        "kind": "hole",
+        "spec": "M4",
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "id": "E2",
+        "pos": [
+          48.72,
+          0.0,
+          3.6
+        ],
+        "desc": "右侧挂墙腰型耳孔",
+        "kind": "hole",
+        "spec": "M4",
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "id": "H1",
+        "pos": [
+          -36.672,
+          -22.672,
+          22.0
+        ],
+        "desc": "下壳角柱孔#1",
+        "kind": "hole",
+        "spec": "M3热熔/攻丝",
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "id": "H2",
+        "pos": [
+          36.672,
+          -22.672,
+          22.0
+        ],
+        "desc": "下壳角柱孔#2",
+        "kind": "hole",
+        "spec": "M3热熔/攻丝",
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "id": "H3",
+        "pos": [
+          -36.672,
+          22.672,
+          22.0
+        ],
+        "desc": "下壳角柱孔#3",
+        "kind": "hole",
+        "spec": "M3热熔/攻丝",
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "id": "H4",
+        "pos": [
+          36.672,
+          22.672,
+          22.0
+        ],
+        "desc": "下壳角柱孔#4",
+        "kind": "hole",
+        "spec": "M3热熔/攻丝",
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "id": "PCB1",
+        "pos": [
+          -28.0,
+          -18.0,
+          7.4
+        ],
+        "desc": "PCB支撑柱#1",
+        "kind": "boss",
+        "spec": "M2.5",
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "id": "PCB2",
+        "pos": [
+          28.0,
+          -18.0,
+          7.4
+        ],
+        "desc": "PCB支撑柱#2",
+        "kind": "boss",
+        "spec": "M2.5",
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "id": "PCB3",
+        "pos": [
+          -28.0,
+          18.0,
+          7.4
+        ],
+        "desc": "PCB支撑柱#3",
+        "kind": "boss",
+        "spec": "M2.5",
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "id": "PCB4",
+        "pos": [
+          28.0,
+          18.0,
+          7.4
+        ],
+        "desc": "PCB支撑柱#4",
+        "kind": "boss",
+        "spec": "M2.5",
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "id": "V1",
+        "pos": [
+          -43.0,
+          0.0,
+          12.592
+        ],
+        "desc": "侧壁散热百叶槽组",
+        "kind": "slot",
+        "spec": "5槽",
+        "normal": [
+          -1.0,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "id": "LID",
+        "pos": [
+          0.0,
+          70.0,
+          8.0
+        ],
+        "desc": "分体上盖(已翻平免支撑排版)",
+        "kind": "datum",
+        "spec": "高8.0mm",
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "id": "USB_C",
+        "pos": [
+          0.0,
+          -29.0,
+          11.0
+        ],
+        "desc": "正面Type-C接口",
+        "kind": "cutout",
+        "spec": "USB-C带插头避让槽",
+        "normal": [
+          0.0,
+          -1.0,
+          0.0
+        ]
+      }
+    ]
+  },
+  "verification": {
+    "ok": true,
+    "is_valid": true,
+    "is_watertight": true,
+    "solids_count": 2,
+    "volume_mm3": 45779.79,
+    "bbox": {
+      "min_mm": [
+        -54.0,
+        -29.0,
+        -0.0
+      ],
+      "max_mm": [
+        54.0,
+        99.0,
+        24.2
+      ],
+      "size_mm": [
+        108.0,
+        128.0,
+        24.2
+      ]
+    },
+    "interferences": [],
+    "issues": [],
+    "warnings": []
+  },
+  "diff": null,
+  "export_2d": {
+    "plane": "XY",
+    "offset_mm": 0.9,
+    "outer_size_mm": [
+      108.0,
+      128.0
+    ],
+    "analytic_brep": true,
+    "holes": [
+      {
+        "id": "C1",
+        "x_mm": -36.67,
+        "y_mm": 47.33,
+        "diameter_mm": 6.25
+      },
+      {
+        "id": "C2",
+        "x_mm": 36.67,
+        "y_mm": 47.33,
+        "diameter_mm": 6.25
+      },
+      {
+        "id": "C3",
+        "x_mm": -36.67,
+        "y_mm": 92.67,
+        "diameter_mm": 6.25
+      },
+      {
+        "id": "C4",
+        "x_mm": 36.67,
+        "y_mm": 92.67,
+        "diameter_mm": 6.25
+      }
+    ],
+    "dxf": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy.dxf",
+    "svg": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy.svg",
+    "drawing_png": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy_2d.png"
+  }
+}

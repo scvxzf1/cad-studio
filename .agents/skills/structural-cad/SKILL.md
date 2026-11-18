@@ -15,20 +15,24 @@ description: >-
 ## 一、 常用 CLI 命令速查（在 `cad-studio` 仓库根目录下执行）
 
 ```bash
-# 1. 初始化新零件目录 projects/<name>/part.py（可选拷入参考模型）
-uv run cad-cli init-part <name> --mode fdm --ref /path/to/ref.step
+# 1. 初始化新零件目录 projects/<name>/part.py（支持 --template: basic | enclosure | extrusion-bracket | din-clip | gear）
+uv run cad-cli init-part <name> --template basic --mode fdm --ref /path/to/ref.step
 
-# 2. 构建零件：导出 STEP + STL + 干涉校验 + 10视图 preview_sheet.png + 修改对比 diff_sheet.png + 3D网页 viewer.html
+# 2. 构建零件：导出 STEP + STL + 干涉校验 + 10视图 + Diff图 + 带射线拾取/3D卡尺的 viewer.html（加 --dxf 可同步出 1:1 DXF/SVG）
 uv run cad-cli build projects/<name>/part.py
+uv run cad-cli build projects/<name>/part.py --dxf bottom
 uv run cad-cli build projects/<name>/part.py --mode cnc   # 一键临时切换 CNC 公差构建
 
-# 3. 逆向体检任意现有 STEP / STL / 3MF（输出平面高度、孔位坐标直径、4张带毫米标尺的截面图）
+# 3. 导出任意 STEP / STL / part.py 的 1:1 激光切割/CNC 二维图纸 (.dxf + .svg + 带孔位坐标表的 *_2d.png)
+uv run cad-cli export-2d <file.step|file.stl|part.py> --face bottom
+
+# 4. 逆向体检任意现有 STEP / STL / 3MF（输出平面高度、孔位坐标直径、4张带毫米标尺的截面图）
 uv run cad-cli inspect <file.step|file.stl> --preview
 
-# 4. 独立对比任意两个新旧模型的三维布尔差异（绿色新增 / 红色切除）
+# 5. 独立对比任意两个新旧模型的三维布尔差异（绿色新增 / 红色切除）
 uv run cad-cli diff old.stl new.stl -o out/diff_sheet.png
 
-# 5. 一键在 BambuStudio 中打开 STEP 或 STL 准备切片
+# 6. 一键在 BambuStudio 中打开 STEP 或 STL 准备切片
 uv run cad-cli open-slicer projects/<name>/out/<name>.step
 ```
 
@@ -43,6 +47,7 @@ uv run cad-cli open-slicer projects/<name>/out/<name>.step
    - 阅读参考文档：
      - 紧固件、热熔螺母、卡扣与公差标准：[fasteners_and_tolerances.md](./references/fasteners_and_tolerances.md)
      - `build123d` 防崩溃拓扑选择与建模范式：[build123d_cookbook.md](./references/build123d_cookbook.md)
+     - 外壳/铝型材/导轨/齿轮母版库、1:1 DXF 导出与 3D 点选口令解析：[templates_and_2d_export.md](./references/templates_and_2d_export.md)
    - 在 `Params` 中定义全部可调尺寸，使用 `cad_kit` 标准特征器（`make_counterbore_cutter`、`make_heatset_cutter`、`make_nut_trap_cutter`、`make_slot_cutter`、`make_rib`、`safe_fillet`、`safe_chamfer`），并用 `reg.mark(...)` 给每个孔/槽/柱打标（`H1`, `S1`, `B1`...）。
 3. **构建与多模态视觉自检**：
    - 运行 `uv run cad-cli build projects/<part_name>/part.py`。

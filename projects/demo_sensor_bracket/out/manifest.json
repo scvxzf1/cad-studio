@@ -1,14 +1,17 @@
 {
   "part_name": "demo_sensor_bracket",
   "mode": "fdm",
-  "elapsed_sec": 11.4,
+  "elapsed_sec": 12.42,
   "files": {
     "script": "projects/demo_sensor_bracket/part.py",
     "step": "projects/demo_sensor_bracket/out/demo_sensor_bracket.step",
     "stl": "projects/demo_sensor_bracket/out/demo_sensor_bracket.stl",
     "preview_sheet_png": "projects/demo_sensor_bracket/out/preview_sheet.png",
     "diff_sheet_png": "projects/demo_sensor_bracket/out/diff_sheet.png",
-    "viewer_html": "projects/demo_sensor_bracket/out/viewer.html"
+    "viewer_html": "projects/demo_sensor_bracket/out/viewer.html",
+    "dxf": "projects/demo_sensor_bracket/out/demo_sensor_bracket_bottom_xy.dxf",
+    "svg": "projects/demo_sensor_bracket/out/demo_sensor_bracket_bottom_xy.svg",
+    "drawing_2d_png": "projects/demo_sensor_bracket/out/demo_sensor_bracket_bottom_xy_2d.png"
   },
   "params": {
     "base_len_x": 52.0,
@@ -210,5 +213,18 @@
       42.0,
       32.0
     ]
+  },
+  "export_2d": {
+    "plane": "XY",
+    "offset_mm": 0.9,
+    "outer_size_mm": [
+      52.0,
+      42.0
+    ],
+    "analytic_brep": false,
+    "holes": [],
+    "dxf": "projects/demo_sensor_bracket/out/demo_sensor_bracket_bottom_xy.dxf",
+    "svg": "projects/demo_sensor_bracket/out/demo_sensor_bracket_bottom_xy.svg",
+    "drawing_png": "projects/demo_sensor_bracket/out/demo_sensor_bracket_bottom_xy_2d.png"
   }
 }

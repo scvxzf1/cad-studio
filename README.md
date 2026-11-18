@@ -14,10 +14,13 @@
 3. **10 合 1 工程总览图 + 红绿 Diff 图 (`preview_sheet.png` & `diff_sheet.png`)**：
    - **正交六视图**（前、后、顶、底、左、右，零透视畸变 + `1mm/5mm/10mm` 标尺 + 特征 ID 红牌）+ **俯仰双等轴测** + **X-Ray 半透明内腔透视** + **橙色中心实心剖视图**。
    - 每次迭代修改自动生成 **红绿布尔对比图**（🟢 绿色 = 新增体积，🔴 红色 = 切除体积，⚪ 灰透 = 保留区）。
-4. **更快更准听懂你的口语修改**：
+4. **更快更准听懂你的口语修改 + WebGL 指哪打哪 / 3D 数字卡尺 (`v0.2`)**：
    - 全项目锁死方位映射：**前=`-Y` ｜ 后=`+Y` ｜ 左=`-X` ｜ 右=`+X` ｜ 上=`+Z` ｜ 下=`-Z`（热床 `Z=0`）**。
    - 每个孔、槽、柱自动注册短编号（如 `[H1]`, `[S1]`, `[B1]`, `[R1]`）投影在图上，可直接点名修改。
-   - 预置 `M1.6 ~ M8` 通孔、内六角沉头孔、皿头锥孔、滚花热熔螺母孔、侧面滑入式防转螺母槽、腰型调节槽与三角加强筋。
+   - **`viewer.html` 射线拾取 + 两点 3D 卡尺**：在 3D 预览器中**单击任意表面、内腔剖面、锐边端点或孔心**，直接生成带精确 `(x, y, z)` 毫米坐标与法向朝向的修改口令，一键复制粘贴发给 Agent；支持两点精确测距（总距 `L` + `|ΔX|, |ΔY|, |ΔZ|` 分量）。
+5. **工业高频结构母版库 + 1:1 激光切割/CNC `DXF / SVG` 导出 (`v0.2`)**：
+   - 内置 **分体式上下盖电子外壳母版**（子母止口 Lip&Groove、四角热熔螺母柱、PCB 支撑柱、散热百叶、挂墙耳、USB-C/DC 面板开孔）、**2020/3030/4040 欧标铝型材防转角码与转接板**、**35mm DIN 导轨快拆弹性卡扣**、**真渐开线正齿轮 / D轴孔 / 608 轴承座**。
+   - 支持一键导出保留**原生 CAD 解析圆弧 (`CIRCLE` / `ARC`)**、内外轮廓自动分层（`INNER_HOLES` / `OUTER_CUT`）的 `1:1` 毫米级 **`.dxf` + `.svg` + 钻孔坐标核对表图**。
 
 ---
 
@@ -31,6 +34,12 @@
 
 ### 3. 现有 STL/STEP 逆向截面测绘 (`sensor_module_inspect_slices.png`)
 ![逆向截面测绘图](projects/demo_sensor_bracket/refs/inspect_sensor_module/sensor_module_inspect_slices.png)
+
+### 4. 上下分体电子控制盒母版 (`demo_iot_enclosure/out/preview_sheet.png`)
+![上下分体子母止口外壳十视图](projects/demo_iot_enclosure/out/preview_sheet.png)
+
+### 5. 1:1 激光切割 / CNC 原生圆弧 DXF 配套核对图 (`demo_iot_enclosure_bottom_xy_2d.png`)
+![1:1二维DXF展开与钻孔表](projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy_2d.png)
 
 ---
 
@@ -56,12 +65,17 @@
 cd cad-studio
 uv sync
 
-# 1. 新建零件工作目录 projects/<name>/part.py
-uv run cad-cli init-part my_bracket --mode fdm
+# 1. 新建零件工作目录（支持 --template: basic | enclosure | extrusion-bracket | din-clip | gear）
+uv run cad-cli init-part my_box --template enclosure --mode fdm
+uv run cad-cli init-part corner_2020 --template extrusion-bracket
 
-# 2. 构建零件（自动输出 .step, .stl, preview_sheet.png, diff_sheet.png, viewer.html, manifest.json）
-uv run cad-cli build projects/demo_sensor_bracket/part.py
+# 2. 构建零件（自动输出 .step, .stl, preview_sheet.png, diff_sheet.png, 带点选/卡尺的 viewer.html，加 --dxf 同步出 2D 图纸）
+uv run cad-cli build projects/demo_sensor_bracket/part.py --dxf bottom
+uv run cad-cli build projects/demo_iot_enclosure/part.py --dxf bottom
 uv run cad-cli build projects/demo_sensor_bracket/part.py --mode cnc   # 切换 CNC 公差档位构建
+
+# 3. 独立导出任意 STEP / STL / part.py 的 1:1 激光切割/CNC 二维图纸 (.dxf + .svg + 钻孔坐标表图)
+uv run cad-cli export-2d projects/demo_sensor_bracket/out/demo_sensor_bracket.step --face back
 
 # 3. 逆向体检任意现有 STEP / STL 文件
 uv run cad-cli inspect projects/demo_sensor_bracket/refs/sensor_module.step --preview

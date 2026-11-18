@@ -1,8 +1,9 @@
 """Unified CLI (`cad-cli`) for CAD Studio.
 
 Subcommands:
-  - cad-cli init-part <name> [--mode fdm|cnc|exact] [--ref <file>]
-  - cad-cli build <part.py> [--mode fdm|cnc|exact] [--html] [--no-diff] [--no-snapshot]
+  - cad-cli init-part <name> [--template basic|enclosure|extrusion-bracket|din-clip|gear] [--mode fdm|cnc|exact] [--ref <file>]
+  - cad-cli build <part.py> [--mode fdm|cnc|exact] [--dxf [face]] [--no-html] [--no-diff]
+  - cad-cli export-2d <file.step|file.stl|part.py> [--face bottom|top|front|back|left|right] [--plane XY|XZ|YZ] [--offset <mm>] [-o <out_dir>]
   - cad-cli inspect <file.step|file.stl> [-o <out_dir>] [--preview]
   - cad-cli diff <old_file> <new_file> [-o <diff_sheet.png>]
   - cad-cli render <file.step|file.stl> [-o <preview_sheet.png>] [--html <viewer.html>]
@@ -15,6 +16,7 @@ import argparse
 from dataclasses import asdict, is_dataclass
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -22,13 +24,26 @@ import sys
 import time
 from typing import Any
 
+from .export_2d import export_2d_profile
 from .inspector import format_inspection_markdown, inspect_cad_file
 from .renderer import compute_volumetric_diff, render_diff_sheet, render_preview_sheet
 from .verify import verify_part_geometry
 from .viewer_html import export_viewer_html
 
 
-PART_SCAFFOLD = '''"""Parametric structural part: __NAME__
+def _portable_path(p: str | Path | None) -> str | None:
+    """Format paths relative to CWD when inside workspace so committed JSON manifests stay portable."""
+    if p is None:
+        return None
+    pp = Path(p).resolve()
+    try:
+        return str(pp.relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return str(pp)
+
+
+TEMPLATES_SCAFFOLD: dict[str, str] = {
+    "basic": '''"""Parametric structural part: __NAME__
 
 Orientation Convention (CAD Studio Standard):
   前 Front = -Y | 后 Back = +Y | 左 Left = -X | 右 Right = +X | 上 Top = +Z | 下 Bottom = -Z (Z=0 热床)
@@ -37,16 +52,13 @@ Orientation Convention (CAD Studio Standard):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from build123d import Align, Box, Axis, Part, Pos, Rot
+from build123d import Align, Axis, Box, Part, Pos
 
 from cad_kit import (
     FeatureRegistry,
     ManufacturingMode,
     ToleranceProfile,
     make_counterbore_cutter,
-    make_heatset_cutter,
-    make_rib,
-    make_slot_cutter,
     safe_chamfer,
     safe_fillet,
 )
@@ -54,15 +66,13 @@ from cad_kit import (
 
 @dataclass
 class Params:
-    """All tunable dimensions in millimeters (mm) — avoid magic numbers in build()."""
-
-    base_len_x: float = 60.0       # 左右总长 (X)
-    base_wid_y: float = 40.0       # 前后总宽 (Y)
-    base_thick_z: float = 5.0      # 底板厚度 (Z)
-    corner_fillet: float = 4.0     # 四角外圆角半径
-    hole_span_x: float = 46.0      # 左右安装孔中心距
-    hole_span_y: float = 26.0      # 前后安装孔中心距
-    mount_screw: str = "M3"        # 安装孔规格
+    base_len_x: float = 60.0
+    base_wid_y: float = 40.0
+    base_thick_z: float = 5.0
+    corner_fillet: float = 4.0
+    hole_span_x: float = 46.0
+    hole_span_y: float = 26.0
+    mount_screw: str = "M3"
 
 
 def build(
@@ -71,39 +81,24 @@ def build(
 ) -> tuple[Part, FeatureRegistry, Params]:
     p = params or Params()
     tol = ToleranceProfile.for_mode(mode)
-    reg = FeatureRegistry(
-        part_name="__NAME__",
-        mode=mode,
-        description="__NAME__ 结构件",
-    )
+    reg = FeatureRegistry(part_name="__NAME__", mode=mode, description="__NAME__ 基础结构安装板")
 
-    # 1. 基础毛坯底板 (XY 居中于原点，底面贴合 Z=0)
-    part = Box(
-        p.base_len_x,
-        p.base_wid_y,
-        p.base_thick_z,
-        align=(Align.CENTER, Align.CENTER, Align.MIN),
-    )
-
-    # 2. 外轮廓竖直边倒圆角 (先圆角外轮廓，再打孔，更稳健)
+    part = Box(p.base_len_x, p.base_wid_y, p.base_thick_z, align=(Align.CENTER, Align.CENTER, Align.MIN))
     part = safe_fillet(part, part.edges().filter_by(Axis.Z), p.corner_fillet, reg, "四角圆角")
 
-    # 3. 底面 (-Z) 防象脚/去毛刺微倒角
     if tol.bed_chamfer > 0:
         bottom_face = part.faces().sort_by(Axis.Z)[0]
         part = safe_chamfer(part, bottom_face.outer_wire().edges(), tol.bed_chamfer, reg, "底边防象脚倒角")
 
-    # 4. 四角 M3 沉头安装孔 (注册语义锚点 H1..H4，自动投影到六视图与3D预览)
     cb_cutter = make_counterbore_cutter(tol, size=p.mount_screw, depth=p.base_thick_z + 5.0)
     hx, hy = p.hole_span_x / 2.0, p.hole_span_y / 2.0
-    hole_defs = [
+    thru_d, cb_d, _ = tol.counterbore_dims(p.mount_screw)
+    for hid, pos, desc in [
         ("H1", (-hx, -hy, p.base_thick_z), "左前安装孔"),
         ("H2", (+hx, -hy, p.base_thick_z), "右前安装孔"),
         ("H3", (-hx, +hy, p.base_thick_z), "左后安装孔"),
         ("H4", (+hx, +hy, p.base_thick_z), "右后安装孔"),
-    ]
-    thru_d, cb_d, _ = tol.counterbore_dims(p.mount_screw)
-    for hid, pos, desc in hole_defs:
+    ]:
         reg.mark(hid, pos, desc, kind="hole", spec=f"{p.mount_screw}沉头 Ø{thru_d}/Ø{cb_d}", normal=(0, 0, 1))
         part = part - Pos(*pos) * cb_cutter
 
@@ -113,7 +108,206 @@ def build(
 if __name__ == "__main__":
     from cad_kit.cli import run_part_build
     run_part_build(__file__)
-'''
+''',
+    "enclosure": '''"""Parametric Split Electronics Enclosure: __NAME__ (上下盖子母止口分体电子盒)"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from build123d import Part
+
+from cad_kit import (
+    EnclosureLayout,
+    EnclosureParams,
+    FeatureRegistry,
+    ManufacturingMode,
+    ToleranceProfile,
+    cut_panel_port,
+    make_split_enclosure,
+)
+
+
+@dataclass
+class Params:
+    outer_x: float = 86.0
+    outer_y: float = 58.0
+    bottom_h: float = 22.0
+    lid_h: float = 8.0
+    wall_t: float = 2.8
+    corner_r: float = 5.0
+    flange_ears: bool = True
+    vent_slots: int = 5
+    usb_c_z: float = 11.0
+    layout: EnclosureLayout = "print_plate"  # 'print_plate' | 'assembled' | 'bottom' | 'lid'
+
+
+def build(
+    params: Params | None = None,
+    mode: ManufacturingMode = "__MODE__",
+) -> tuple[Part, FeatureRegistry, Params]:
+    p = params or Params()
+    tol = ToleranceProfile.for_mode(mode)
+    reg = FeatureRegistry(part_name="__NAME__", mode=mode, description="__NAME__ 上下分体电子控制盒")
+
+    enc_cfg = EnclosureParams(
+        outer_x=p.outer_x,
+        outer_y=p.outer_y,
+        bottom_h=p.bottom_h,
+        lid_h=p.lid_h,
+        wall_t=p.wall_t,
+        corner_r=p.corner_r,
+        flange_ears=p.flange_ears,
+        vent_slots=p.vent_slots,
+        pcb_standoffs=[(-28.0, -18.0), (28.0, -18.0), (-28.0, 18.0), (28.0, 18.0)],
+        pcb_standoff_h=5.0,
+    )
+    part = make_split_enclosure(enc_cfg, tol=tol, reg=reg, layout=p.layout)
+
+    # 在下壳正面 (-Y = -outer_y/2) 开带插头避让沉槽的 USB-C 接口
+    if p.layout != "lid":
+        part = cut_panel_port(
+            part,
+            wall="-Y",
+            port_type="usb_c",
+            offset_along_wall=0.0,
+            center_z=p.usb_c_z,
+            wall_coord=-p.outer_y * 0.5,
+            tol=tol,
+            reg=reg,
+            anchor_id="USB_C",
+            desc="正面Type-C接口",
+        )
+    return part, reg, p
+
+
+if __name__ == "__main__":
+    from cad_kit.cli import run_part_build
+    run_part_build(__file__)
+''',
+    "extrusion-bracket": '''"""2020/3030/4040 Aluminum Extrusion Corner Gusset Bracket: __NAME__"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from build123d import Part
+
+from cad_kit import (
+    ExtrusionSeries,
+    FeatureRegistry,
+    ManufacturingMode,
+    ToleranceProfile,
+    make_extrusion_bracket,
+)
+
+
+@dataclass
+class Params:
+    series: ExtrusionSeries = "2020"
+    arm_len: float = 44.0
+    wall_t: float = 5.0
+    gusset_t: float = 3.8
+    with_tongues: bool = True
+
+
+def build(
+    params: Params | None = None,
+    mode: ManufacturingMode = "__MODE__",
+) -> tuple[Part, FeatureRegistry, Params]:
+    p = params or Params()
+    tol = ToleranceProfile.for_mode(mode)
+    reg = FeatureRegistry(part_name="__NAME__", mode=mode, description=f"{p.series} 欧标铝型材防转直角加强角码")
+    part = make_extrusion_bracket(
+        series=p.series,
+        arm_len=p.arm_len,
+        wall_t=p.wall_t,
+        gusset_t=p.gusset_t,
+        with_tongues=p.with_tongues,
+        tol=tol,
+        reg=reg,
+    )
+    return part, reg, p
+''',
+    "din-clip": '''"""35mm Standard TS35 DIN Rail Snap-On Clip: __NAME__"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from build123d import Part
+
+from cad_kit import FeatureRegistry, ManufacturingMode, ToleranceProfile, make_din_rail_clip
+
+
+@dataclass
+class Params:
+    width_x: float = 18.0
+    top_deck_y: float = 48.0
+    deck_thick_z: float = 4.5
+    mount_hole_span_y: float = 30.0
+    mount_screw: str = "M3"
+
+
+def build(
+    params: Params | None = None,
+    mode: ManufacturingMode = "__MODE__",
+) -> tuple[Part, FeatureRegistry, Params]:
+    p = params or Params()
+    tol = ToleranceProfile.for_mode(mode)
+    reg = FeatureRegistry(part_name="__NAME__", mode=mode, description="35mm 欧标 DIN 导轨快拆弹性卡扣底座")
+    part = make_din_rail_clip(
+        width_x=p.width_x,
+        top_deck_y=p.top_deck_y,
+        deck_thick_z=p.deck_thick_z,
+        mount_hole_span_y=p.mount_hole_span_y,
+        mount_screw=p.mount_screw,
+        tol=tol,
+        reg=reg,
+    )
+    return part, reg, p
+''',
+    "gear": '''"""Parametric Involute Spur Gear with Hub & D-Shaft Bore: __NAME__"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from build123d import Part
+
+from cad_kit import FeatureRegistry, ManufacturingMode, ToleranceProfile, make_spur_gear
+
+
+@dataclass
+class Params:
+    module: float = 1.5
+    teeth: int = 24
+    thickness: float = 6.0
+    bore_d: float = 5.0
+    d_shaft_flat: float = 4.5
+    hub_d: float = 16.0
+    hub_h: float = 7.0
+    set_screw: str = "M3"
+
+
+def build(
+    params: Params | None = None,
+    mode: ManufacturingMode = "__MODE__",
+) -> tuple[Part, FeatureRegistry, Params]:
+    p = params or Params()
+    tol = ToleranceProfile.for_mode(mode)
+    reg = FeatureRegistry(part_name="__NAME__", mode=mode, description=f"渐开线正齿轮 m={p.module} z={p.teeth}")
+    part = make_spur_gear(
+        module=p.module,
+        teeth=p.teeth,
+        thickness=p.thickness,
+        bore_d=p.bore_d,
+        d_shaft_flat=p.d_shaft_flat,
+        hub_d=p.hub_d,
+        hub_h=p.hub_h,
+        set_screw=p.set_screw,
+        tol=tol,
+        reg=reg,
+    )
+    return part, reg, p
+''',
+}
 
 
 def _load_part_module(script_path: Path) -> Any:
@@ -133,9 +327,10 @@ def run_part_build(
     gen_html: bool = True,
     gen_diff: bool = True,
     save_snapshot: bool = True,
-    expected_solids: int = 1,
+    expected_solids: int | None = None,
+    dxf_face: str | None = None,
 ) -> dict[str, Any]:
-    """Execute a part.py script, export STEP/STL, verify geometry/interference, and render views."""
+    """Execute a part.py script, export STEP/STL (+ optional DXF/SVG), verify geometry, and render views."""
     t0 = time.perf_counter()
     sp = Path(script_path).expanduser().resolve()
     if not sp.exists():
@@ -164,17 +359,19 @@ def run_part_build(
     active_mode = (mode or (reg.mode if reg else "fdm")).lower()
     part_name = reg.part_name if reg else sp.stem
     params_dict = asdict(params_obj) if (params_obj is not None and is_dataclass(params_obj)) else {}
-    anchors_list = reg.to_dict()["anchors"] if reg else []
+    reg_dict = reg.to_dict() if reg else {}
+    if "reference_files" in reg_dict:
+        reg_dict["reference_files"] = [_portable_path(rf) for rf in reg_dict["reference_files"]]
+    anchors_list = reg_dict.get("anchors", [])
     ref_files = reg.reference_files if reg else []
+    exp_solids = expected_solids if expected_solids is not None else (reg.expected_solids if reg else 1)
 
-    # Export STEP & STL
     is_brep = hasattr(part, "solids") and hasattr(part, "tessellate")
-    step_path = od / f"{part_name}.step"
+    step_path: Path | None = od / f"{part_name}.step"
     stl_path = od / f"{part_name}.stl"
     prev_dir = od / ".prev"
     prev_stl = prev_dir / f"{part_name}_prev.stl"
 
-    # Snapshot existing STL to a staging file BEFORE overwriting so identical rebuilds keep last real diff!
     staging_old = prev_dir / f"{part_name}_staging.stl"
     if stl_path.exists():
         prev_dir.mkdir(parents=True, exist_ok=True)
@@ -182,17 +379,18 @@ def run_part_build(
 
     if is_brep:
         import build123d as bd
+        assert step_path is not None
         bd.export_step(part, str(step_path))
         bd.export_stl(part, str(stl_path), tolerance=0.02, angular_tolerance=0.08)
     else:
-        # trimesh output from direct STL modification
         part.export(str(stl_path))
-        step_path = None  # type: ignore[assignment]
+        step_path = None
 
-    # Run geometry & interference verification
-    check = verify_part_geometry(part, expected_solids=expected_solids, ref_files=ref_files)
+    check = verify_part_geometry(part, expected_solids=exp_solids, ref_files=ref_files)
+    for item in check.get("interferences", []):
+        if "ref_file" in item:
+            item["ref_file"] = _portable_path(item["ref_file"])
 
-    # Render 10-view Engineering Sheet
     preview_png = od / "preview_sheet.png"
     render_preview_sheet(
         target=part,
@@ -203,7 +401,6 @@ def run_part_build(
         ref_files=ref_files,
     )
 
-    # Determine whether geometry changed vs staging_old; if so, promote staging_old -> prev_stl
     diff_png: Path | None = None
     diff_stats: dict[str, Any] | None = None
     diff_meshes: dict[str, Any] | None = None
@@ -222,7 +419,6 @@ def run_part_build(
             diff_stats = {k: v for k, v in raw_diff.items() if not k.endswith("_mesh")}
             diff_meshes = raw_diff
 
-    # Export Interactive 3D WebGL Viewer HTML
     viewer_path: Path | None = None
     if gen_html:
         viewer_path = od / "viewer.html"
@@ -237,27 +433,46 @@ def run_part_build(
             diff_meshes=diff_meshes,
         )
 
+    export2d_info: dict[str, Any] | None = None
+    if dxf_face:
+        face_arg = dxf_face.lower() if dxf_face.lower() in ("bottom", "top", "front", "back", "left", "right") else None
+        plane_arg = dxf_face.upper() if dxf_face.upper() in ("XY", "XZ", "YZ") else "XY"
+        export2d_info = export_2d_profile(
+            part,
+            out_dir=od,
+            name=part_name,
+            plane=plane_arg,  # type: ignore[arg-type]
+            face=face_arg,    # type: ignore[arg-type]
+        )
+        for k2 in ("dxf", "svg", "drawing_png"):
+            if k2 in export2d_info:
+                export2d_info[k2] = _portable_path(export2d_info[k2])
+
     elapsed = round(time.perf_counter() - t0, 2)
     manifest = {
         "part_name": part_name,
         "mode": active_mode,
         "elapsed_sec": elapsed,
         "files": {
-            "script": str(sp),
-            "step": str(step_path) if step_path else None,
-            "stl": str(stl_path),
-            "preview_sheet_png": str(preview_png),
-            "diff_sheet_png": str(diff_png) if diff_png else None,
-            "viewer_html": str(viewer_path) if viewer_path else None,
+            "script": _portable_path(sp),
+            "step": _portable_path(step_path),
+            "stl": _portable_path(stl_path),
+            "preview_sheet_png": _portable_path(preview_png),
+            "diff_sheet_png": _portable_path(diff_png),
+            "viewer_html": _portable_path(viewer_path),
+            "dxf": export2d_info["dxf"] if export2d_info else None,
+            "svg": export2d_info["svg"] if export2d_info else None,
+            "drawing_2d_png": export2d_info["drawing_png"] if export2d_info else None,
         },
         "params": params_dict,
-        "registry": reg.to_dict() if reg else {},
+        "registry": reg_dict,
         "verification": check,
         "diff": diff_stats,
+        "export_2d": export2d_info,
     }
     manifest_path = od / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    manifest["files"]["manifest_json"] = str(manifest_path)
+    manifest["files"]["manifest_json"] = _portable_path(manifest_path)
     return manifest
 
 
@@ -270,7 +485,8 @@ def _cmd_init_part(args: argparse.Namespace) -> int:
     if script_file.exists() and not args.force:
         print(f"[!] {script_file} already exists (use --force to overwrite).")
         return 1
-    code = PART_SCAFFOLD.replace("__NAME__", args.name).replace("__MODE__", args.mode)
+    tpl = TEMPLATES_SCAFFOLD[args.template]
+    code = tpl.replace("__NAME__", args.name).replace("__MODE__", args.mode)
     script_file.write_text(code, encoding="utf-8")
     if args.ref:
         ref_src = Path(args.ref).expanduser().resolve()
@@ -278,7 +494,7 @@ def _cmd_init_part(args: argparse.Namespace) -> int:
             dst = part_dir / "refs" / ref_src.name
             shutil.copy2(ref_src, dst)
             print(f"[+] Copied reference file -> {dst}")
-    print(f"[+] Initialized part project at: {part_dir}")
+    print(f"[+] Initialized part project [{args.template}] at: {part_dir}")
     print(f"    Edit:  {script_file}")
     print(f"    Build: uv run cad-cli build {script_file}")
     return 0
@@ -293,6 +509,7 @@ def _cmd_build(args: argparse.Namespace) -> int:
         gen_diff=not args.no_diff,
         save_snapshot=not args.no_snapshot,
         expected_solids=args.expected_solids,
+        dxf_face=args.dxf,
     )
     v = manifest["verification"]
     bb = v["bbox"]
@@ -313,6 +530,34 @@ def _cmd_build(args: argparse.Namespace) -> int:
     return 0 if v["ok"] else 2
 
 
+def _cmd_export_2d(args: argparse.Namespace) -> int:
+    src = Path(args.input).expanduser().resolve()
+    out_dir = Path(args.out_dir).expanduser().resolve() if args.out_dir else (src.parent / "out" if src.suffix == ".py" else src.parent)
+    target: Any = src
+    name = src.stem
+    if src.suffix.lower() == ".py":
+        mod = _load_part_module(src)
+        res = mod.build()
+        target = res[0] if isinstance(res, tuple) else res
+        if isinstance(res, tuple) and len(res) >= 2 and res[1] is not None:
+            name = res[1].part_name
+    info = export_2d_profile(
+        target=target,
+        out_dir=out_dir,
+        name=name,
+        plane=args.plane,
+        face=args.face,
+        offset=args.offset,
+    )
+    print(f"[✓] Exported 1:1 2D Laser/CNC files ({info['plane']} @ {info['offset_mm']} mm):")
+    print(f"    Outer Size  : {info['outer_size_mm'][0]} × {info['outer_size_mm'][1]} mm  (Analytic B-Rep: {info['analytic_brep']})")
+    print(f"    DXF File    : {info['dxf']}")
+    print(f"    SVG File    : {info['svg']}")
+    print(f"    2D Blueprint: {info['drawing_png']}")
+    print(f"    Holes Count : {len(info['holes'])}")
+    return 0
+
+
 def _cmd_inspect(args: argparse.Namespace) -> int:
     src = Path(args.file).expanduser().resolve()
     out_dir = Path(args.out_dir).expanduser().resolve() if args.out_dir else (src.parent / f"inspect_{src.stem}")
@@ -320,7 +565,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     if args.preview:
         prev_png = out_dir / f"{src.stem}_preview_sheet.png"
         render_preview_sheet(src, prev_png, title=f"参考件: {src.name}", mode="exact")
-        info["preview_sheet_png"] = str(prev_png)
+        info["preview_sheet_png"] = _portable_path(prev_png)
     print(format_inspection_markdown(info))
     print(f"[✓] Saved slices PNG : {info.get('slices_png')}")
     if info.get("preview_sheet_png"):
@@ -350,7 +595,6 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
 
 def _cmd_open_slicer(args: argparse.Namespace) -> int:
-    import os
     target = Path(args.file).expanduser().resolve()
     if not target.exists():
         print(f"[!] File not found: {target}")
@@ -363,7 +607,6 @@ def _cmd_open_slicer(args: argparse.Namespace) -> int:
         found = shutil.which(cmd_name)
         if found:
             candidates.append(Path(found))
-    # Auto-discover sibling 3d-mark directory if present locally
     sibling_dir = Path(__file__).resolve().parents[2] / "3d-mark"
     if sibling_dir.is_dir():
         candidates.extend(sorted(sibling_dir.glob("启动BambuStudio.sh")))
@@ -383,6 +626,12 @@ def main() -> None:
 
     p_init = sub.add_parser("init-part", help="Create a new parametric part workspace under projects/<name>")
     p_init.add_argument("name", help="Part folder/identifier name")
+    p_init.add_argument(
+        "--template",
+        choices=list(TEMPLATES_SCAFFOLD.keys()),
+        default="basic",
+        help="Starter structural template (basic, enclosure, extrusion-bracket, din-clip, gear)",
+    )
     p_init.add_argument("--mode", choices=["fdm", "cnc", "exact"], default="fdm")
     p_init.add_argument("--ref", help="Optional existing STEP/STL file to copy into refs/")
     p_init.add_argument("--force", action="store_true", help="Overwrite existing part.py")
@@ -392,11 +641,26 @@ def main() -> None:
     p_build.add_argument("script", help="Path to part.py")
     p_build.add_argument("--mode", choices=["fdm", "cnc", "exact"], default=None, help="Override manufacturing mode")
     p_build.add_argument("-o", "--out-dir", default=None, help="Custom output directory")
+    p_build.add_argument(
+        "--dxf",
+        nargs="?",
+        const="bottom",
+        default=None,
+        help="Also export 1:1 2D DXF/SVG (optional face/plane: bottom, top, front, back, left, right, XY, XZ, YZ)",
+    )
     p_build.add_argument("--no-html", action="store_true", help="Skip generating viewer.html")
     p_build.add_argument("--no-diff", action="store_true", help="Skip generating diff_sheet.png")
     p_build.add_argument("--no-snapshot", action="store_true", help="Do not overwrite .prev baseline STL")
-    p_build.add_argument("--expected-solids", type=int, default=1, help="Expected connected solid count (0 to disable)")
+    p_build.add_argument("--expected-solids", type=int, default=None, help="Expected connected solid count (0 to disable)")
     p_build.set_defaults(func=_cmd_build)
+
+    p_2d = sub.add_parser("export-2d", help="Export 1:1 laser/CNC DXF + SVG + Hole Drilling Sheet from STEP/STL/part.py")
+    p_2d.add_argument("input", help="Input .step / .stl / part.py")
+    p_2d.add_argument("--face", choices=["bottom", "top", "front", "back", "left", "right"], default=None)
+    p_2d.add_argument("--plane", choices=["XY", "XZ", "YZ"], default="XY")
+    p_2d.add_argument("--offset", type=float, default=None, help="Exact section coordinate (mm)")
+    p_2d.add_argument("-o", "--out-dir", default=None, help="Output folder")
+    p_2d.set_defaults(func=_cmd_export_2d)
 
     p_insp = sub.add_parser("inspect", help="Reverse-engineer dimensions, planes, holes & 2D slices of STEP/STL")
     p_insp.add_argument("file", help="Path to .step / .stp / .stl / .3mf file")

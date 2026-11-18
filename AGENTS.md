@@ -31,6 +31,8 @@
 3. **关键特征必须用 `reg.mark("H1", pos, desc, kind, spec, normal)` 打标**：
    - 孔用 `H1, H2...`、槽/开口用 `S1, S2...`、凸台/柱用 `B1, B2...`、加强筋用 `R1, R2...`。
    - 渲染器会自动把 `[H1]`、`[S1]` 红牌投影在六视图和交互式 3D 网页上，方便用户直接看图点名修改。
+   - **支持 3D 点选口令与卡尺数据直解**：当用户从 `viewer.html` 复制发来 `修改零件 xxx：针对位置 (x, y, z) mm [所在面朝向: ...]` 或 `实测两点间距 P1 ↔ P2 ...` 时，直接提取该精确世界毫米坐标与法向朝向定位参数执行修改，无需二次猜测位置。
+4. **优先复用工业结构母版与 2D 导出**：遇到上下分体电子外壳（`make_split_enclosure` + `cut_panel_port`）、2020/3030/4040 欧标铝型材角码与防转卡舌（`make_extrusion_bracket` / `make_tslot_tongue`）、35mm DIN 导轨卡扣（`make_din_rail_clip`）、渐开线齿轮/轴承座（`make_spur_gear` / `make_bearing_block`）时直接调用 `cad_kit.templates`；遇到激光切割、钣金、CNC 二维加工需求时用 `cad-cli export-2d` 或 `--dxf` 输出 1:1 原生圆弧 `.dxf` + `.svg`。
 
 ## 3. 参考或修改现有文件时：先体检，禁止盲猜坐标！
 

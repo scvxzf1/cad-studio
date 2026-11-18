@@ -1,5 +1,6 @@
 """cad_kit: Agentic Structural CAD Toolkit (FDM / CNC / Exact)."""
 
+from .export_2d import export_2d_profile
 from .features import (
     FeatureAnchor,
     FeatureRegistry,
@@ -17,11 +18,34 @@ from .features import (
 from .inspector import inspect_cad_file, shape_to_trimesh
 from .mesh_ops import center_mesh_on_bed, modify_mesh
 from .renderer import compute_volumetric_diff, render_diff_sheet, render_preview_sheet
+from .templates import (
+    BEARING_TABLE,
+    EXTRUSION_SPECS,
+    EnclosureLayout,
+    EnclosureParams,
+    ExtrusionSeries,
+    ExtrusionSpec,
+    cut_panel_port,
+    make_bearing_block,
+    make_d_shaft_cutter,
+    make_din_rail_clip,
+    make_extrusion_bracket,
+    make_extrusion_mount_plate,
+    make_split_enclosure,
+    make_spur_gear,
+    make_tslot_tongue,
+)
 from .tolerances import FASTENER_TABLE, FastenerEntry, ManufacturingMode, ToleranceProfile, get_fastener
 from .verify import verify_part_geometry
 from .viewer_html import export_viewer_html
 
 __all__ = [
+    "BEARING_TABLE",
+    "EXTRUSION_SPECS",
+    "EnclosureLayout",
+    "EnclosureParams",
+    "ExtrusionSeries",
+    "ExtrusionSpec",
     "FASTENER_TABLE",
     "FastenerEntry",
     "FeatureAnchor",
@@ -30,17 +54,27 @@ __all__ = [
     "ToleranceProfile",
     "center_mesh_on_bed",
     "compute_volumetric_diff",
+    "cut_panel_port",
+    "export_2d_profile",
     "export_viewer_html",
     "get_fastener",
     "inspect_cad_file",
+    "make_bearing_block",
     "make_counterbore_cutter",
     "make_countersink_cutter",
+    "make_d_shaft_cutter",
+    "make_din_rail_clip",
+    "make_extrusion_bracket",
+    "make_extrusion_mount_plate",
     "make_heatset_cutter",
     "make_hole_cutter",
     "make_mounting_boss",
     "make_nut_trap_cutter",
     "make_rib",
     "make_slot_cutter",
+    "make_split_enclosure",
+    "make_spur_gear",
+    "make_tslot_tongue",
     "modify_mesh",
     "render_diff_sheet",
     "render_preview_sheet",

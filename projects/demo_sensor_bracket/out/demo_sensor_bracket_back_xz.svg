@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg width="52.2mm" height="32.2mm" viewBox="-26.1 -32.1 52.2 32.2" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <g transform="scale(1,-1)" stroke-linecap="round">
+    <g fill="none" stroke="rgb(14,23,42)" stroke-width="0.2" id="OUTER_CUT">
+      <path d="M 26.0,32.0 L -26.0,32.0 L -26.0,0.4 L -25.6,-0.0 L 25.6,0.0 L 26.0,0.4 L 26.0,32.0" />
+    </g>
+    <g fill="none" stroke="rgb(1,132,199)" stroke-width="0.18" id="INNER_HOLES">
+      <circle cx="0.0" cy="20.0" r="3.875" />
+    </g>
+  </g>
+</svg>

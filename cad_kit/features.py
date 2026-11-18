@@ -54,6 +54,7 @@ class FeatureRegistry:
     part_name: str
     mode: ManufacturingMode = "fdm"
     description: str = ""
+    expected_solids: int = 1
     anchors: list[FeatureAnchor] = field(default_factory=list)
     reference_files: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
