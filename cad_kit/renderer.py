@@ -256,8 +256,10 @@ def render_preview_sheet(
     ref_files: list[str | Path] | None = None,
 ) -> Path:
     """Generate the 10-panel Engineering Contact Sheet (`preview_sheet.png`)."""
+    from .large_cad import load_mesh_cached
+
     _configure_cjk_font()
-    mesh = load_any_as_trimesh(target)
+    mesh = load_mesh_cached(target, tier="render")
     if len(mesh.faces) == 0:
         raise ValueError("Cannot render preview sheet: mesh is empty!")
 
@@ -266,7 +268,7 @@ def render_preview_sheet(
 
     ref_poly: pv.PolyData | None = None
     if ref_files:
-        ref_meshes = [load_any_as_trimesh(rf) for rf in ref_files if Path(rf).exists()]
+        ref_meshes = [load_mesh_cached(rf, tier="render") for rf in ref_files if Path(rf).exists()]
         if ref_meshes:
             combined_ref = trimesh.util.concatenate(ref_meshes)
             ref_poly = trimesh_to_pv(combined_ref)

@@ -6,7 +6,8 @@ __pycache__/
 dist/
 build/
 
-# CAD temporary & previous build caches
+# CAD binary LOD & proxy caches
+.cad_cache/
 **/out/.prev/
 **/out/*.tmp.*
 .DS_Store

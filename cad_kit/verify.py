@@ -86,18 +86,31 @@ def verify_part_geometry(
     if not mesh.is_watertight:
         warnings.append("导出三角网格非严格水密 (non-watertight)，请在切片前留意修复提示。")
 
-    # Assembly collision / interference check against reference parts
+    # Assembly collision / interference check against reference parts (cached LOD + C++ ROI pre-crop!)
     interferences: list[dict[str, Any]] = []
     if ref_files:
+        from .large_cad import check_large_file_warnings, crop_manifold_to_bbox, load_mesh_cached
+
+        warnings.extend(check_large_file_warnings(ref_files))
         try:
             m_part = trimesh_to_manifold(mesh)
+            p_min_arr = np.asarray(bmin, dtype=float)
+            p_max_arr = np.asarray(bmax, dtype=float)
             for rf in ref_files:
                 rf_path = Path(rf).expanduser().resolve()
                 if not rf_path.exists():
                     warnings.append(f"参考文件不存在，跳过干涉检查: {rf_path}")
                     continue
-                ref_mesh = load_any_as_trimesh(rf_path)
+                ref_mesh = load_mesh_cached(rf_path, tier="work")
+                r_min, r_max = ref_mesh.bounds
+                # Instant O(1) AABB separation test: skip boolean completely if bounding boxes don't touch!
+                if np.any(p_max_arr < r_min - 1e-4) or np.any(r_max < p_min_arr - 1e-4):
+                    interferences.append({"ref_file": str(rf_path), "collision_volume_mm3": 0.0, "has_collision": False})
+                    continue
+
                 m_ref = trimesh_to_manifold(ref_mesh)
+                if len(ref_mesh.faces) > 25_000:
+                    m_ref = crop_manifold_to_bbox(m_ref, p_min_arr, p_max_arr, margin=2.0)
                 inter = m_part ^ m_ref  # manifold3d intersection operator
                 inter_mesh = manifold_to_trimesh(inter)
                 inter_vol = float(inter_mesh.volume) if len(inter_mesh.faces) > 0 else 0.0

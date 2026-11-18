@@ -1,6 +1,6 @@
 [project]
 name = "cad-studio"
-version = "0.4.0"
+version = "0.5.0"
 description = "Agentic Structural CAD Studio: STEP/STL/3MF parametric modeling, reverse inspection, 10-view blueprint, volumetric diff, DFM printability, multi-part assembly & hot MCP server."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

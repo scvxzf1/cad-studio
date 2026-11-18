@@ -18,6 +18,7 @@ description: >-
 - **`cad_status()`**：0.1s 列出所有项目、`Params` 参数表（含中文注释）与特征锚点（`H1/S1`）；
 - **`cad_lookup_spec(query="M3" | "2020" | "608" | "enclosure")`**：即时查紧固件/轴承/型材尺寸与母版签名，无需通读参考大文档；
 - **`cad_set_params(script_path, updates={"front_slot_w": 20.0}, fast=False)`**：**微调尺寸首选！** AST 级安全改参（保留源码注释、零语法错误风险）并自动完成热重构与红绿 Diff 出图；
+- **`cad_optimize_file(input_path, tolerance_mm=0.025, min_solid_diag_mm=2.0, roi_bbox=..., out_format="3mf")`**：**超大 STEP/STL 预处理利器！** 遇到几十至几百 MB 的扫描件、ASCII 大网格或含上千颗贴片电阻的整机/PCB `.step` 时，一键完成水密受控减面、剔除微小电子碎块、局部关注区（ROI）裁剪并转存高压缩比 `.3mf`（体积通常缩小 `85%~98%`）；
 - **`cad_init_project(...)` / `cad_build(...)` / `cad_inspect(...)` / `cad_print_check(...)` / `cad_export_2d(...)`**：对应全套新建、构建、逆向体检、DFM 悬垂扫描与 1:1 DXF 导出。
 
 ---
@@ -48,8 +49,12 @@ uv run cad-cli print-check <file.step|file.stl|part.py> --auto-orient
 uv run cad-cli init-assembly <asm_name>
 uv run cad-cli build-assembly projects/<asm_name>/assembly.py
 
-# 6. 逆向体检任意现有 STEP / STL / 3MF（输出平面高度、孔位坐标直径、4张带毫米标尺的截面图）
+# 6. 逆向体检任意现有 STEP / STL / 3MF（内置多级 LOD 与大装配体微小碎块自动过滤）
 uv run cad-cli inspect <file.step|file.stl> --preview
+
+# 6.5 超大 STEP / STL 瘦身、去贴片碎块与局部 ROI 裁剪（85%~98% 体积压缩，保持 100% 水密）
+uv run cad-cli optimize huge_scan.stl --tol 0.03 --format 3mf
+uv run cad-cli optimize mainboard_assy.step --min-solid-diag 2.5 --roi -50,50,-40,40,0,35 -o refs/board_mount_zone.3mf
 
 # 7. 独立对比任意两个新旧模型的三维布尔差异（绿色新增 / 红色切除）
 uv run cad-cli diff old.stl new.stl -o out/diff_sheet.png

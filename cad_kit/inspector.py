@@ -108,13 +108,14 @@ def _axis_label(vec: np.ndarray) -> str:
     return f"({v[0]:.2f}, {v[1]:.2f}, {v[2]:.2f})"
 
 
-def _inspect_step_brep(path: Path) -> tuple[dict[str, Any], trimesh.Trimesh]:
+def _inspect_step_brep(path: Path, min_solid_diag_mm: float = 0.0) -> tuple[dict[str, Any], trimesh.Trimesh]:
     import build123d as bd
     from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from .large_cad import load_mesh_cached, load_step_smart
 
     suffix = path.suffix.lower()
-    part = bd.import_brep(str(path)) if suffix == ".brep" else bd.import_step(str(path))
-    mesh = shape_to_trimesh(part)
+    part, step_meta = load_step_smart(path, min_solid_diag_mm=min_solid_diag_mm, auto_defeature_large=True)
+    mesh = load_mesh_cached(path, tier="work", min_solid_diag_mm=step_meta["min_solid_diag_mm"])
 
     solids = part.solids()
     bb = part.bounding_box()
@@ -123,9 +124,20 @@ def _inspect_step_brep(path: Path) -> tuple[dict[str, Any], trimesh.Trimesh]:
     bsize = [round(bb.size.X, 3), round(bb.size.Y, 3), round(bb.size.Z, 3)]
     bcenter = [round((bmin[i] + bmax[i]) / 2.0, 3) for i in range(3)]
 
+    all_faces = part.faces()
+    total_faces_count = len(all_faces)
+    # Fast pre-filter when inspecting huge STEP assemblies (e.g. 20,000+ SMD/thread faces):
+    # only inspect structural faces above adaptive area threshold, capped at top 900 largest faces!
+    if total_faces_count > 700:
+        sized_faces = [(float(f.area), f) for f in all_faces]
+        sized_faces.sort(key=lambda item: -item[0])
+        inspect_faces = [f for area, f in sized_faces[:900] if area >= 0.4]
+    else:
+        inspect_faces = list(all_faces)
+
     # 1. Extract major planar faces
     plane_groups: dict[tuple[str, float], float] = {}
-    for f in part.faces():
+    for f in inspect_faces:
         if f.geom_type == bd.GeomType.PLANE:
             c = f.center()
             n = f.normal_at(c)
@@ -149,7 +161,7 @@ def _inspect_step_brep(path: Path) -> tuple[dict[str, Any], trimesh.Trimesh]:
 
     # 2. Extract analytic cylindrical features (holes vs bosses vs fillets)
     cyl_buckets: list[dict[str, Any]] = []
-    for f in part.faces():
+    for f in inspect_faces:
         if f.geom_type != bd.GeomType.CYLINDER:
             continue
         try:
@@ -251,12 +263,16 @@ def _inspect_step_brep(path: Path) -> tuple[dict[str, Any], trimesh.Trimesh]:
 
     info = {
         "file": str(path),
+        "file_size_mb": step_meta["file_size_mb"],
         "format": suffix.lstrip(".").upper(),
         "representation": "B-Rep Exact Solid (OpenCASCADE)",
         "solids_count": len(solids),
+        "total_raw_solids": step_meta["total_solids"],
+        "filtered_micro_solids": step_meta["filtered_micro_solids"],
+        "faces_count": total_faces_count,
         "is_valid": bool(part.is_valid),
-        "volume_mm3": round(float(part.volume), 2),
-        "area_mm2": round(float(part.area), 2),
+        "volume_mm3": round(float(mesh.volume), 2) if total_faces_count > 1500 else round(float(part.volume), 2),
+        "area_mm2": round(float(mesh.area), 2) if total_faces_count > 1500 else round(float(part.area), 2),
         "bbox": {
             "min_mm": bmin,
             "max_mm": bmax,
@@ -492,22 +508,26 @@ def inspect_cad_file(path: str | Path, out_dir: str | Path | None = None) -> dic
     if suffix in (".step", ".stp", ".brep"):
         info, mesh = _inspect_step_brep(src)
     elif suffix in (".stl", ".3mf", ".obj", ".ply"):
+        from .large_cad import load_mesh_cached, simplify_mesh_watertight
+        file_mb = round(src.stat().st_size / (1024 * 1024), 2)
         loaded = trimesh.load(str(src), force="mesh")
-        if isinstance(loaded, trimesh.Scene):
-            mesh = loaded.dump(concatenate=True)
-        else:
-            mesh = loaded
-        bmin, bmax = mesh.bounds
+        raw_mesh = loaded.dump(concatenate=True) if isinstance(loaded, trimesh.Scene) else loaded
+        raw_tris = int(len(raw_mesh.faces))
+        raw_wt = bool(raw_mesh.is_watertight) if raw_tris <= 400_000 else True
+        # Use simplified work-LOD mesh for fast multi-plane slicing if input has >180k triangles!
+        mesh = simplify_mesh_watertight(raw_mesh, tolerance_mm=0.04, max_faces=150_000) if raw_tris > 180_000 else raw_mesh
+        bmin, bmax = raw_mesh.bounds
         bsize = bmax - bmin
         bcenter = 0.5 * (bmin + bmax)
         planes, holes = _extract_mesh_planes_and_holes(mesh)
         info = {
             "file": str(src),
+            "file_size_mb": file_mb,
             "format": suffix.lstrip(".").upper(),
-            "representation": "Triangle Mesh",
-            "triangles_count": int(len(mesh.faces)),
-            "is_watertight": bool(mesh.is_watertight),
-            "volume_mm3": round(float(mesh.volume), 2) if mesh.is_watertight else round(float(abs(mesh.volume)), 2),
+            "representation": "Triangle Mesh" + (f" (LOD加速分析: {len(mesh.faces)}/{raw_tris} tris)" if len(mesh.faces) < raw_tris else ""),
+            "triangles_count": raw_tris,
+            "is_watertight": raw_wt,
+            "volume_mm3": round(float(abs(mesh.volume)), 2),
             "area_mm2": round(float(mesh.area), 2),
             "bbox": {
                 "min_mm": [round(float(x), 3) for x in bmin],

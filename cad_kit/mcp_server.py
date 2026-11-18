@@ -29,6 +29,7 @@ with contextlib.redirect_stdout(sys.stderr):
     )
     from .export_2d import export_2d_profile
     from .inspector import inspect_cad_file
+    from .large_cad import optimize_cad_file
     from .printability import apply_optimal_orientation, export_3mf, render_printability_sheet
     from .renderer import render_preview_sheet
 
@@ -246,6 +247,33 @@ def cad_export_2d(
                 name = res[1].part_name
         face_arg = face if face in ("bottom", "top", "front", "back", "left", "right") else None
         return export_2d_profile(target, out_dir=od, name=name, plane=plane, face=face_arg, offset=offset)  # type: ignore[arg-type]
+
+
+@mcp.tool(
+    description="针对超大 .step / .stl / .3mf 文件 (几十~几百MB) 进行水密误差受控减面瘦身、剔除微小电子元件/螺纹碎块 (min_solid_diag_mm)、局部包围盒裁剪 (roi_bbox) 或转存高压缩比 .3mf / 二进制 .stl。"
+)
+def cad_optimize_file(
+    input_path: str,
+    out_path: str = "",
+    tolerance_mm: float = 0.025,
+    max_faces: int = 0,
+    min_solid_diag_mm: float = 0.0,
+    roi_bbox: list[float] | None = None,
+    out_format: str = "3mf",
+) -> dict[str, Any]:
+    with contextlib.redirect_stdout(sys.stderr):
+        src = _resolve_target_path(input_path)
+        dst = Path(out_path).expanduser().resolve() if out_path else None
+        roi_tuple = tuple(float(x) for x in roi_bbox) if (roi_bbox and len(roi_bbox) == 6) else None
+        return optimize_cad_file(
+            input_path=src,
+            out_path=dst,
+            tolerance_mm=tolerance_mm,
+            max_faces=max_faces if max_faces > 0 else None,
+            min_solid_diag_mm=min_solid_diag_mm,
+            roi_bbox=roi_tuple,  # type: ignore[arg-type]
+            out_format=out_format,  # type: ignore[arg-type]
+        )
 
 
 def main() -> None:

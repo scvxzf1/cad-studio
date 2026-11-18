@@ -27,6 +27,10 @@
 8. **热驻留 MCP Server + 全局 Antigravity Plugin + 原子级无损改参 (`v0.4`)**：
    - 内置常驻内存的 **`cad-studio-mcp` 服务**（共享离屏 OpenGL 上下文复用，免除每次 `OpenCASCADE + VTK` 冷加载，热改参出图提速数倍）与一键全局插件安装器 `uv run cad-cli install-plugin`；
    - 提供 AST 级无损改参 `set-param` / `cad_set_params`（保留源码中文注释，零语法错误风险）、全局索引 `status`、标准件速查 `lookup`、OCCT 中文报错定位，以及顶点索引压缩版 `viewer.html`。
+9. **百兆级超大 STEP / STL 涡轮加速与水密瘦身引擎 (`v0.5`)**：
+   - **三级自动 LOD 管线 + `.cad_cache/` 磁盘缓存**：百万面级模型在 WebGL 预览层（`<=35k` 面，`0.1s` C++ 聚类降采样）、十视图渲染层（`<=120k` 面）、干涉/截面分析层（`<=160k` 水密面）自动分级处理，二次热加载仅需 `~15ms`，绝不撑爆网页或内存；
+   - **整机/PCB `.step` 微小碎块自动剥离 + 36 核并行三角化**：自动剔除大型装配体中 `<2.0mm` 的贴片电阻/螺纹碎块并保留核心壳体与安装孔；
+   - **`cad-cli optimize` / `cad_optimize_file`**：一键将臃肿的百兆级 STL/STEP 误差受控水密简化、局部包围盒（`--roi`）裁剪并转存为高压缩 `.3mf`（体积缩减 `85%~98%`），附带 `>45MB` GitHub 大文件越界预警。
 
 ---
 
@@ -103,6 +107,10 @@ uv run cad-cli build-assembly projects/demo_din_sensor_unit/assembly.py
 
 # 5. 独立导出任意 STEP / STL / part.py 的 1:1 激光切割/CNC 二维图纸 (.dxf + .svg + 钻孔坐标表图)
 uv run cad-cli export-2d projects/demo_sensor_bracket/out/demo_sensor_bracket.step --face back
+
+# 6. 超大 STEP / STL 模型瘦身、剥离微小元件与局部关注区 (ROI) 裁剪
+uv run cad-cli optimize huge_scan.stl --tol 0.03 --format 3mf
+uv run cad-cli optimize full_pcb.step --min-solid-diag 2.0 --roi -40,40,-30,30,0,25 -o refs/pcb_slim.3mf
 
 # 3. 逆向体检任意现有 STEP / STL 文件
 uv run cad-cli inspect projects/demo_sensor_bracket/refs/sensor_module.step --preview

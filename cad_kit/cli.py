@@ -33,6 +33,7 @@ from .ergonomics import (
 )
 from .export_2d import export_2d_profile
 from .inspector import format_inspection_markdown, inspect_cad_file
+from .large_cad import check_large_file_warnings, optimize_cad_file
 from .printability import apply_optimal_orientation, export_3mf, rank_six_orientations, render_printability_sheet
 from .renderer import compute_volumetric_diff, render_diff_sheet, render_preview_sheet
 from .verify import verify_part_geometry
@@ -401,11 +402,15 @@ def run_part_build(
 
     if is_brep:
         import build123d as bd
+        import math
         assert step_path is not None
+        bb_part = part.bounding_box()
+        p_diag = max(math.hypot(bb_part.size.X, bb_part.size.Y, bb_part.size.Z), 1.0)
+        lin_tol = max(0.02, min(0.15, p_diag * 0.0004))
         bd.export_step(part, str(step_path))
-        bd.export_stl(part, str(stl_path), tolerance=0.02, angular_tolerance=0.08)
+        bd.export_stl(part, str(stl_path), tolerance=lin_tol, angular_tolerance=0.10, ascii_format=False)
     else:
-        part.export(str(stl_path))
+        part.export(str(stl_path), file_type="stl")
         step_path = None
 
     export_3mf([{"name": part_name, "shape": part, "color": "#3b82f6"}], threemf_path)
@@ -415,6 +420,7 @@ def run_part_build(
     part_mesh = load_any_as_trimesh(stl_path)
 
     check = verify_part_geometry(part, expected_solids=exp_solids, ref_files=ref_files)
+    check["warnings"].extend(check_large_file_warnings([step_path, stl_path, threemf_path]))
     for item in check.get("interferences", []):
         if "ref_file" in item:
             item["ref_file"] = _portable_path(item["ref_file"])
@@ -927,6 +933,34 @@ def _cmd_lookup(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_optimize(args: argparse.Namespace) -> int:
+    roi_tuple = None
+    if args.roi:
+        parts = [float(x.strip()) for x in args.roi.split(",")]
+        if len(parts) != 6:
+            print("[!] --roi expects 6 comma-separated numbers: xmin,xmax,ymin,ymax,zmin,zmax")
+            return 1
+        roi_tuple = tuple(parts)  # type: ignore[assignment]
+
+    res = optimize_cad_file(
+        input_path=args.input,
+        out_path=args.output,
+        tolerance_mm=args.tol,
+        max_faces=args.max_faces,
+        min_solid_diag_mm=args.min_solid_diag,
+        roi_bbox=roi_tuple,  # type: ignore[arg-type]
+        out_format=args.format,
+    )
+    print(f"[✓] Optimized '{Path(res['input_file']).name}' -> '{Path(res['output_file']).name}' in {res['elapsed_sec']}s")
+    print(f"    File Size : {res['size_before_mb']} MB -> {res['size_after_mb']} MB  (-{res['size_reduction_pct']}%)")
+    print(f"    Triangles : {res['faces_before']:,} -> {res['faces_after']:,}  (-{res['faces_reduction_pct']}%)")
+    print(f"    Watertight: {res['is_watertight']}  |  Volume: {res['volume_before_mm3']} -> {res['volume_after_mm3']} mm³")
+    if res.get("step_defeature_info") and res["step_defeature_info"]["filtered_micro_solids"] > 0:
+        si = res["step_defeature_info"]
+        print(f"    STEP Clean: Filtered {si['filtered_micro_solids']} micro-solids (<{si['min_solid_diag_mm']}mm), kept {si['kept_solids']} main solids")
+    return 0
+
+
 def _cmd_install_plugin(args: argparse.Namespace) -> int:
     studio_root = Path(__file__).resolve().parents[1]
     python_bin = studio_root / ".venv" / "bin" / "python"
@@ -941,7 +975,7 @@ def _cmd_install_plugin(args: argparse.Namespace) -> int:
     plugin_manifest = {
         "name": "cad-studio",
         "displayName": "CAD Studio (Structural STEP/STL/3MF)",
-        "version": "0.4.0",
+        "version": "0.5.0",
         "description": "Parametric STEP/STL/3MF structural CAD modeling, reverse inspection, 10-view blueprint, volumetric diff, DFM printability, multi-part assembly & hot MCP server.",
         "logo": "assets/logo.svg",
         "repository": "https://github.com/scvxzf1/cad-studio",
@@ -1090,6 +1124,16 @@ def main() -> None:
     p_look = sub.add_parser("lookup", help="Instant lookup of fastener/bearing/extrusion specs & template signatures")
     p_look.add_argument("query", nargs="?", default="", help="e.g. M3, 2020, 608, enclosure")
     p_look.set_defaults(func=_cmd_lookup)
+
+    p_opt = sub.add_parser("optimize", help="Slim, simplify, defeature or ROI-crop huge STEP/STL/3MF files (80%~98% smaller)")
+    p_opt.add_argument("input", help="Path to huge .step / .stl / .3mf")
+    p_opt.add_argument("-o", "--output", default=None, help="Output file path (default: <stem>_slim.3mf)")
+    p_opt.add_argument("--tol", type=float, default=0.025, help="Watertight geometric error bound in mm (default: 0.025)")
+    p_opt.add_argument("--max-faces", type=int, default=None, help="Optional target maximum triangle cap")
+    p_opt.add_argument("--min-solid-diag", type=float, default=0.0, help="Drop micro-solids smaller than this diagonal (mm) in STEP assemblies")
+    p_opt.add_argument("--roi", default=None, help="Optional 3D crop box: xmin,xmax,ymin,ymax,zmin,zmax")
+    p_opt.add_argument("--format", choices=["3mf", "stl"], default="3mf", help="Output format (3mf is ~5x smaller than binary stl)")
+    p_opt.set_defaults(func=_cmd_optimize)
 
     p_plug = sub.add_parser("install-plugin", help="Install CAD Studio + Hot MCP Server as a global Antigravity Plugin")
     p_plug.add_argument("--target-dir", default="~/.gemini/config/plugins/cad-studio", help="Plugin destination directory")

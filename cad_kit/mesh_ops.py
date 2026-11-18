@@ -20,11 +20,21 @@ def modify_mesh(
     add_parts: Iterable[Any] = (),
     cut_parts: Iterable[Any] = (),
     translate_xyz: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    auto_simplify_above_faces: int = 250_000,
+    simplify_tol_mm: float = 0.025,
 ) -> trimesh.Trimesh:
-    """Apply additive and subtractive 3D booleans to an existing STL/3MF mesh cleanly."""
-    base_mesh = load_any_as_trimesh(base_mesh_or_path).copy()
+    """Apply additive and subtractive 3D booleans to an existing STL/3MF mesh cleanly.
+
+    Automatically simplifies ultra-dense scan/high-poly meshes (>250k tris) within `simplify_tol_mm`
+    so `manifold3d` boolean operations stay sub-second and watertight!
+    """
+    from .large_cad import load_mesh_cached, simplify_mesh_watertight
+
+    base_mesh = load_mesh_cached(base_mesh_or_path, tier="full").copy()
     if any(abs(v) > 1e-9 for v in translate_xyz):
         base_mesh.apply_translation(np.asarray(translate_xyz, dtype=float))
+    if auto_simplify_above_faces > 0 and len(base_mesh.faces) > auto_simplify_above_faces:
+        base_mesh = simplify_mesh_watertight(base_mesh, tolerance_mm=simplify_tol_mm)
 
     m = trimesh_to_manifold(base_mesh)
     for add_item in add_parts:

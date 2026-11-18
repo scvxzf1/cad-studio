@@ -39,16 +39,10 @@ def _encode_f32(arr: np.ndarray) -> str:
 
 
 def _load_viewer_mesh(target: Any) -> trimesh.Trimesh:
-    """Load mesh with lightweight viewer tessellation so HTML stays compact and snappy."""
-    if hasattr(target, "tessellate"):
-        return shape_to_trimesh(target, angular_deflection=0.26, linear_deflection=0.12)
-    if isinstance(target, (str, Path)):
-        p = Path(target).expanduser().resolve()
-        if p.suffix.lower() in (".step", ".stp", ".brep"):
-            import build123d as bd
-            part = bd.import_brep(str(p)) if p.suffix.lower() == ".brep" else bd.import_step(str(p))
-            return shape_to_trimesh(part, angular_deflection=0.26, linear_deflection=0.12)
-    return load_any_as_trimesh(target)
+    """Load mesh with cached `viewer` LOD (<=35k tris via O(N) C++ QuadricClustering) so HTML never bloats!"""
+    from .large_cad import load_mesh_cached
+
+    return load_mesh_cached(target, tier="viewer")
 
 
 def _pack_mesh_layer(

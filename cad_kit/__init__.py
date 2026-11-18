@@ -1,6 +1,6 @@
 """cad_kit: Agentic Structural CAD Toolkit (FDM / CNC / Exact)."""
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 from .assembly import (
     Assembly,
@@ -13,6 +13,14 @@ from .assembly import (
     verify_assembly,
 )
 from .export_2d import export_2d_profile
+from .large_cad import (
+    crop_manifold_to_bbox,
+    decimate_visual_fast,
+    load_mesh_cached,
+    load_step_smart,
+    optimize_cad_file,
+    simplify_mesh_watertight,
+)
 from .features import (
     FeatureAnchor,
     FeatureRegistry,
@@ -79,13 +87,17 @@ __all__ = [
     "build_bom_data",
     "center_mesh_on_bed",
     "compute_volumetric_diff",
+    "crop_manifold_to_bbox",
     "cut_panel_port",
+    "decimate_visual_fast",
     "export_2d_profile",
     "export_3mf",
     "export_print_plate_3mf",
     "export_viewer_html",
     "get_fastener",
     "inspect_cad_file",
+    "load_mesh_cached",
+    "load_step_smart",
     "make_bearing_block",
     "make_counterbore_cutter",
     "make_countersink_cutter",
@@ -103,6 +115,7 @@ __all__ = [
     "make_spur_gear",
     "make_tslot_tongue",
     "modify_mesh",
+    "optimize_cad_file",
     "rank_six_orientations",
     "render_assembly_sheet",
     "render_diff_sheet",
@@ -112,6 +125,7 @@ __all__ = [
     "safe_chamfer",
     "safe_fillet",
     "shape_to_trimesh",
+    "simplify_mesh_watertight",
     "verify_assembly",
     "verify_part_geometry",
 ]
