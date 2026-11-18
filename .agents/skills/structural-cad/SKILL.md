@@ -26,14 +26,21 @@ uv run cad-cli build projects/<name>/part.py --mode cnc   # 一键临时切换 C
 # 3. 导出任意 STEP / STL / part.py 的 1:1 激光切割/CNC 二维图纸 (.dxf + .svg + 带孔位坐标表的 *_2d.png)
 uv run cad-cli export-2d <file.step|file.stl|part.py> --face bottom
 
-# 4. 逆向体检任意现有 STEP / STL / 3MF（输出平面高度、孔位坐标直径、4张带毫米标尺的截面图）
+# 4. 3D 打印可制造性体检（悬垂/孤岛热力图 + 6向智能最佳摆放寻优 + 自动换向导出 .3mf/.step）
+uv run cad-cli print-check <file.step|file.stl|part.py> --auto-orient
+
+# 5. 多零件总装（N×N 全矩阵碰撞/最小间隙体检 + 爆炸图 + 紧固件 BOM + 自动排盘 .3mf + WebGL 爆炸滑块）
+uv run cad-cli init-assembly <asm_name>
+uv run cad-cli build-assembly projects/<asm_name>/assembly.py
+
+# 6. 逆向体检任意现有 STEP / STL / 3MF（输出平面高度、孔位坐标直径、4张带毫米标尺的截面图）
 uv run cad-cli inspect <file.step|file.stl> --preview
 
-# 5. 独立对比任意两个新旧模型的三维布尔差异（绿色新增 / 红色切除）
+# 7. 独立对比任意两个新旧模型的三维布尔差异（绿色新增 / 红色切除）
 uv run cad-cli diff old.stl new.stl -o out/diff_sheet.png
 
-# 6. 一键在 BambuStudio 中打开 STEP 或 STL 准备切片
-uv run cad-cli open-slicer projects/<name>/out/<name>.step
+# 8. 一键在 BambuStudio 中打开 STEP / STL / 3MF 准备切片
+uv run cad-cli open-slicer projects/<name>/out/<name>.3mf
 ```
 
 ---
@@ -48,6 +55,7 @@ uv run cad-cli open-slicer projects/<name>/out/<name>.step
      - 紧固件、热熔螺母、卡扣与公差标准：[fasteners_and_tolerances.md](./references/fasteners_and_tolerances.md)
      - `build123d` 防崩溃拓扑选择与建模范式：[build123d_cookbook.md](./references/build123d_cookbook.md)
      - 外壳/铝型材/导轨/齿轮母版库、1:1 DXF 导出与 3D 点选口令解析：[templates_and_2d_export.md](./references/templates_and_2d_export.md)
+     - 3D 打印悬垂/孤岛 DFM 体检、自动摆放与多零件总装爆炸图/BOM 指南：[printability_and_assembly.md](./references/printability_and_assembly.md)
    - 在 `Params` 中定义全部可调尺寸，使用 `cad_kit` 标准特征器（`make_counterbore_cutter`、`make_heatset_cutter`、`make_nut_trap_cutter`、`make_slot_cutter`、`make_rib`、`safe_fillet`、`safe_chamfer`），并用 `reg.mark(...)` 给每个孔/槽/柱打标（`H1`, `S1`, `B1`...）。
 3. **构建与多模态视觉自检**：
    - 运行 `uv run cad-cli build projects/<part_name>/part.py`。

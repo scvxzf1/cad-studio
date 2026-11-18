@@ -55,6 +55,7 @@ def _pack_mesh_layer(
     color: tuple[float, float, float],
     opacity: float = 1.0,
     visible: bool = True,
+    explode_vec: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> dict[str, Any] | None:
     if mesh is None or len(mesh.faces) == 0:
         return None
@@ -88,12 +89,15 @@ def _pack_mesh_layer(
         if segs:
             edge_pts = np.asarray(segs, dtype=np.float32)
 
+    center_pt = [round(float(x), 3) for x in (0.5 * (mesh.bounds[0] + mesh.bounds[1]))]
     return {
         "name": name,
         "label": label,
         "color": list(color),
         "opacity": float(opacity),
         "visible": bool(visible),
+        "explodeVec": [round(float(x), 3) for x in explode_vec],
+        "center": center_pt,
         "vertCount": int(len(tri_pos)),
         "posB64": _encode_f32(tri_pos),
         "nrmB64": _encode_f32(tri_nrm),
@@ -223,6 +227,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           <button id="btn-copy-caliper" class="w-full py-1.5 rounded font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90">
             📋 复制实测尺寸与修改指令
           </button>
+        </div>
+
+        <!-- Panel Explode: Multi-Part Assembly Explosion Slider (auto-shown when explodeVec exists) -->
+        <div id="panel-explode" class="hidden space-y-1.5 pb-2.5 border-b border-[var(--border)]">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-[var(--foreground)]">💥 装配体动态爆炸拆解</span>
+            <span id="val-explode" class="font-mono font-bold text-[var(--primary)]">0% (闭合)</span>
+          </div>
+          <input type="range" id="rng-explode" min="0" max="100" value="0" class="w-full accent-[var(--primary)]" />
         </div>
 
         <!-- Display Toggles -->
@@ -413,12 +426,14 @@ const VS_MESH = `
 attribute vec3 aPos;
 attribute vec3 aNrm;
 uniform mat4 uMVP;
+uniform vec3 uOffset;
 varying vec3 vPos;
 varying vec3 vNrm;
 void main() {
-  vPos = aPos;
+  vec3 wp = aPos + uOffset;
+  vPos = wp;
   vNrm = aNrm;
-  gl_Position = uMVP * vec4(aPos, 1.0);
+  gl_Position = uMVP * vec4(wp, 1.0);
 }`;
 
 const FS_MESH = `
@@ -452,12 +467,14 @@ const VS_LINE = `
 attribute vec3 aPos;
 attribute vec3 aCol;
 uniform mat4 uMVP;
+uniform vec3 uOffset;
 varying vec3 vPos;
 varying vec3 vCol;
 void main() {
-  vPos = aPos;
+  vec3 wp = aPos + uOffset;
+  vPos = wp;
   vCol = aCol;
-  gl_Position = uMVP * vec4(aPos, 1.0);
+  gl_Position = uMVP * vec4(wp, 1.0);
 }`;
 
 const FS_LINE = `
@@ -569,6 +586,7 @@ const state = {
   grid: true,
   snap: true,
   tool: 'pick',       // 'pick' | 'caliper'
+  explode: 0.0,       // 0.0 ~ 1.0 assembly explosion factor
   clipFrac: [1.0, 1.0, 1.0],
   picked: null,       // { pt:[x,y,z], normal:[nx,ny,nz], faceLabel, snapLabel, layerLabel }
   caliperPts: [],     // [ pt1Obj, pt2Obj ]
@@ -669,11 +687,13 @@ function raycastScene(sx, sy) {
 
   for (const ly of gpuLayers) {
     if (!ly.visible) continue;
+    const ev = ly.explodeVec || [0, 0, 0];
+    const ox = ev[0] * state.explode, oy = ev[1] * state.explode, oz = ev[2] * state.explode;
     const P = ly.posArr;
     for (let i = 0; i < P.length; i += 9) {
-      const ax=P[i], ay=P[i+1], az=P[i+2];
-      const bx=P[i+3], by=P[i+4], bz=P[i+5];
-      const cx=P[i+6], cy=P[i+7], cz=P[i+8];
+      const ax=P[i]+ox,   ay=P[i+1]+oy, az=P[i+2]+oz;
+      const bx=P[i+3]+ox, by=P[i+4]+oy, bz=P[i+5]+oz;
+      const cx=P[i+6]+ox, cy=P[i+7]+oy, cz=P[i+8]+oz;
       const e1x=bx-ax, e1y=by-ay, e1z=bz-az;
       const e2x=cx-ax, e2y=cy-ay, e2z=cz-az;
       const hx = dy*e2z - dz*e2y, hy = dz*e2x - dx*e2z, hz = dx*e2y - dy*e2x;
@@ -713,10 +733,12 @@ function raycastScene(sx, sy) {
     const snapTolWorld = Math.max(diag * 0.08, 4.0);
     for (const ly of gpuLayers) {
       if (!ly.visible || !ly.edgeArr) continue;
+      const ev = ly.explodeVec || [0, 0, 0];
+      const ox = ev[0] * state.explode, oy = ev[1] * state.explode, oz = ev[2] * state.explode;
       const E = ly.edgeArr;
       for (let i = 0; i < E.length; i += 6) {
-        const v1 = [E[i], E[i+1], E[i+2]];
-        const v2 = [E[i+3], E[i+4], E[i+5]];
+        const v1 = [E[i]+ox, E[i+1]+oy, E[i+2]+oz];
+        const v2 = [E[i+3]+ox, E[i+4]+oy, E[i+5]+oz];
         const mid = [0.5*(v1[0]+v2[0]), 0.5*(v1[1]+v2[1]), 0.5*(v1[2]+v2[2])];
         for (const [cand, kindName] of [[v1, '锐边顶点'], [v2, '锐边顶点'], [mid, '锐边中点']]) {
           if (isPointClipped(cand)) continue;
@@ -931,6 +953,18 @@ document.getElementById('chk-edges').addEventListener('change', e => { state.edg
 document.getElementById('chk-pins').addEventListener('change', e => { state.pins = e.target.checked; requestRender(); });
 document.getElementById('chk-grid').addEventListener('change', e => { state.grid = e.target.checked; requestRender(); });
 
+const hasExplode = gpuLayers.some(l => l.explodeVec && Math.hypot(...l.explodeVec) > 0.1);
+if (hasExplode) {
+  document.getElementById('panel-explode').classList.remove('hidden');
+  const rngExp = document.getElementById('rng-explode');
+  const valExp = document.getElementById('val-explode');
+  rngExp.addEventListener('input', () => {
+    state.explode = Number(rngExp.value) / 100.0;
+    valExp.textContent = state.explode === 0 ? '0% (闭合)' : `${rngExp.value}% (拆解)`;
+    requestRender();
+  });
+}
+
 ['x', 'y', 'z'].forEach((ax, idx) => {
   const rng = document.getElementById('rng-clip-' + ax);
   const valEl = document.getElementById('val-clip-' + ax);
@@ -1042,6 +1076,18 @@ function buildOverlayLines() {
     pts.push(...px, ...pxy); cols.push(0.13,0.77,0.37, 0.13,0.77,0.37);
     pts.push(...pxy, ...p2); cols.push(0.23,0.51,0.96, 0.23,0.51,0.96);
   }
+  // Draw explosion guide lines connecting home center -> exploded center
+  if (state.explode > 0.01) {
+    gpuLayers.forEach((ly) => {
+      if (!ly.visible || !ly.center || !ly.explodeVec) return;
+      const ev = ly.explodeVec;
+      if (Math.hypot(ev[0], ev[1], ev[2]) < 0.2) return;
+      const c0 = ly.center;
+      const c1 = [c0[0] + ev[0]*state.explode, c0[1] + ev[1]*state.explode, c0[2] + ev[2]*state.explode];
+      pts.push(...c0, ...c1);
+      cols.push(...ly.color, ...ly.color);
+    });
+  }
   return { pts: new Float32Array(pts), cols: new Float32Array(cols), count: pts.length / 3 };
 }
 
@@ -1090,6 +1136,7 @@ function renderFrame() {
   if (state.grid) {
     gl.useProgram(progLine);
     gl.uniformMatrix4fv(gl.getUniformLocation(progLine, 'uMVP'), false, mvp);
+    gl.uniform3fv(gl.getUniformLocation(progLine, 'uOffset'), [0, 0, 0]);
     gl.uniform1f(gl.getUniformLocation(progLine, 'uAlpha'), 0.65);
     gl.uniform1f(gl.getUniformLocation(progLine, 'uUseClip'), 0.0);
     const aPos = gl.getAttribLocation(progLine, 'aPos'), aCol = gl.getAttribLocation(progLine, 'aCol');
@@ -1106,6 +1153,8 @@ function renderFrame() {
   gl.uniform3fv(gl.getUniformLocation(progMesh, 'uClipActive'), clipActive);
 
   ordered.forEach((ly) => {
+    const ev = ly.explodeVec || [0, 0, 0];
+    gl.uniform3fv(gl.getUniformLocation(progMesh, 'uOffset'), [ev[0]*state.explode, ev[1]*state.explode, ev[2]*state.explode]);
     const effOpacity = state.xray ? Math.min(ly.opacity, 0.30) : ly.opacity;
     const transparent = effOpacity < 0.98;
     if (transparent) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); }
@@ -1131,6 +1180,8 @@ function renderFrame() {
     const aPos = gl.getAttribLocation(progLine, 'aPos'), aCol = gl.getAttribLocation(progLine, 'aCol');
     ordered.forEach((ly) => {
       if (!ly.edgeVertCount) return;
+      const ev = ly.explodeVec || [0, 0, 0];
+      gl.uniform3fv(gl.getUniformLocation(progLine, 'uOffset'), [ev[0]*state.explode, ev[1]*state.explode, ev[2]*state.explode]);
       gl.uniform1f(gl.getUniformLocation(progLine, 'uAlpha'), ly.opacity < 0.5 ? 0.45 : 0.9);
       gl.bindBuffer(gl.ARRAY_BUFFER, ly.edgeBuf); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, ly.edgeColBuf); gl.enableVertexAttribArray(aCol); gl.vertexAttribPointer(aCol, 3, gl.FLOAT, false, 0, 0);
@@ -1144,6 +1195,7 @@ function renderFrame() {
     gl.disable(gl.DEPTH_TEST);
     gl.useProgram(progLine);
     gl.uniformMatrix4fv(gl.getUniformLocation(progLine, 'uMVP'), false, mvp);
+    gl.uniform3fv(gl.getUniformLocation(progLine, 'uOffset'), [0, 0, 0]);
     gl.uniform1f(gl.getUniformLocation(progLine, 'uAlpha'), 1.0);
     gl.uniform1f(gl.getUniformLocation(progLine, 'uUseClip'), 0.0);
     const aPos = gl.getAttribLocation(progLine, 'aPos'), aCol = gl.getAttribLocation(progLine, 'aCol');
@@ -1205,17 +1257,37 @@ def export_viewer_html(
     anchors: list[dict[str, Any]] | None = None,
     ref_files: list[str | Path] | None = None,
     diff_meshes: dict[str, trimesh.Trimesh] | None = None,
+    assembly_items: list[dict[str, Any]] | None = None,
 ) -> Path:
-    """Export a standalone interactive WebGL 3D CAD Picker, Caliper & Section-Cut viewer HTML file."""
-    main_mesh = _load_viewer_mesh(target)
-    bmin, bmax = main_mesh.bounds
+    """Export a standalone interactive WebGL 3D CAD Picker, Caliper, Explode & Section-Cut viewer HTML file."""
+    layers: list[dict[str, Any]] = []
+    if assembly_items:
+        all_meshes: list[trimesh.Trimesh] = []
+        for it in assembly_items:
+            m_it = _load_viewer_mesh(it["shape"])
+            all_meshes.append(m_it)
+            ly = _pack_mesh_layer(
+                m_it,
+                name=str(it["id"]),
+                label=str(it["label"]),
+                color=tuple(it["rgb"]),
+                opacity=float(it.get("opacity", 1.0)),
+                visible=True,
+                explode_vec=tuple(it.get("explode_vec", (0.0, 0.0, 0.0))),
+            )
+            if ly:
+                layers.append(ly)
+        combined = trimesh.util.concatenate(all_meshes)
+        bmin, bmax = combined.bounds
+    else:
+        main_mesh = _load_viewer_mesh(target)
+        bmin, bmax = main_mesh.bounds
+        main_layer = _pack_mesh_layer(main_mesh, "main", "当前零件", (0.23, 0.51, 0.96), opacity=1.0, visible=True)
+        if main_layer:
+            layers.append(main_layer)
+
     bsize = bmax - bmin
     bcenter = 0.5 * (bmin + bmax)
-
-    layers: list[dict[str, Any]] = []
-    main_layer = _pack_mesh_layer(main_mesh, "main", "当前零件", (0.23, 0.51, 0.96), opacity=1.0, visible=True)
-    if main_layer:
-        layers.append(main_layer)
 
     if ref_files:
         ref_list = [_load_viewer_mesh(rf) for rf in ref_files if Path(rf).exists()]

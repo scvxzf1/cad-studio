@@ -1,0 +1,181 @@
+{
+  "assembly_name": "demo_din_sensor_unit",
+  "mode": "fdm",
+  "verification": {
+    "ok": true,
+    "parts_count": 4,
+    "printable_parts_count": 3,
+    "bbox": {
+      "min_mm": [
+        -39.0,
+        -27.0,
+        -11.52
+      ],
+      "max_mm": [
+        39.0,
+        27.0,
+        27.5
+      ],
+      "size_mm": [
+        78.0,
+        54.0,
+        39.02
+      ]
+    },
+    "pairs": [
+      {
+        "part_a": "控制盒下壳",
+        "part_b": "主控传感器PCB板",
+        "collision_volume_mm3": 0.0,
+        "min_clearance_mm": 0.285,
+        "status": "OK 安全间隙",
+        "collision_bbox": null
+      },
+      {
+        "part_a": "控制盒下壳",
+        "part_b": "防尘子母扣上盖",
+        "collision_volume_mm3": 0.0,
+        "min_clearance_mm": 0.166,
+        "status": "OK 安全间隙",
+        "collision_bbox": null
+      },
+      {
+        "part_a": "控制盒下壳",
+        "part_b": "35mm导轨弹性卡扣",
+        "collision_volume_mm3": 0.0,
+        "min_clearance_mm": 0.073,
+        "status": "OK 贴合接触",
+        "collision_bbox": null
+      }
+    ],
+    "issues": []
+  },
+  "bom": {
+    "assembly_name": "demo_din_sensor_unit",
+    "description": "DIN导轨安装式工业传感器分体控制盒总装 (含下壳、上盖、导轨快拆卡座与内部PCB模块)",
+    "mode": "fdm",
+    "total_estimated_print_weight_g": 23.6,
+    "parts": [
+      {
+        "index": 1,
+        "part_id": "bottom_box",
+        "label": "控制盒下壳",
+        "type": "自制结构件",
+        "qty": 1,
+        "size_mm": [
+          78.0,
+          54.0,
+          22.2
+        ],
+        "volume_cm3": 26.11,
+        "est_filament_g": 13.7,
+        "material": "PETG / PLA"
+      },
+      {
+        "index": 2,
+        "part_id": "ctrl_pcb",
+        "label": "主控传感器PCB板",
+        "type": "外购/参考件",
+        "qty": 1,
+        "size_mm": [
+          62.0,
+          40.0,
+          1.6
+        ],
+        "volume_cm3": 3.81,
+        "est_filament_g": 0.0,
+        "material": "外购标准/参考件"
+      },
+      {
+        "index": 3,
+        "part_id": "top_lid",
+        "label": "防尘子母扣上盖",
+        "type": "自制结构件",
+        "qty": 1,
+        "size_mm": [
+          78.0,
+          54.0,
+          7.5
+        ],
+        "volume_cm3": 13.12,
+        "est_filament_g": 6.9,
+        "material": "PETG / PLA"
+      },
+      {
+        "index": 4,
+        "part_id": "din_clip",
+        "label": "35mm导轨弹性卡扣",
+        "type": "自制结构件",
+        "qty": 1,
+        "size_mm": [
+          22.0,
+          50.0,
+          11.5
+        ],
+        "volume_cm3": 5.67,
+        "est_filament_g": 3.0,
+        "material": "PETG / PLA"
+      }
+    ],
+    "hardware": [
+      {
+        "spec": "M3×8 内六角圆柱头螺丝 (ISO 4762)",
+        "category": "紧固件",
+        "qty": 4,
+        "note": "上盖锁紧至下壳四角"
+      },
+      {
+        "spec": "M3×D4.5×L5 滚花热熔铜螺母",
+        "category": "嵌件",
+        "qty": 6,
+        "note": "下壳四角 ×4 + 导轨卡扣 ×2"
+      },
+      {
+        "spec": "M2.5×5 圆头自攻/机丝螺丝",
+        "category": "紧固件",
+        "qty": 4,
+        "note": "固定内部传感器PCB板"
+      },
+      {
+        "spec": "M3×6 平头沉头螺丝",
+        "category": "紧固件",
+        "qty": 2,
+        "note": "下壳底部固定至DIN导轨卡座"
+      }
+    ],
+    "clearance_matrix": [
+      {
+        "part_a": "控制盒下壳",
+        "part_b": "主控传感器PCB板",
+        "collision_volume_mm3": 0.0,
+        "min_clearance_mm": 0.285,
+        "status": "OK 安全间隙",
+        "collision_bbox": null
+      },
+      {
+        "part_a": "控制盒下壳",
+        "part_b": "防尘子母扣上盖",
+        "collision_volume_mm3": 0.0,
+        "min_clearance_mm": 0.166,
+        "status": "OK 安全间隙",
+        "collision_bbox": null
+      },
+      {
+        "part_a": "控制盒下壳",
+        "part_b": "35mm导轨弹性卡扣",
+        "collision_volume_mm3": 0.0,
+        "min_clearance_mm": 0.073,
+        "status": "OK 贴合接触",
+        "collision_bbox": null
+      }
+    ]
+  },
+  "files": {
+    "assembly_step": "projects/demo_din_sensor_unit/out/demo_din_sensor_unit_assembly.step",
+    "assembly_3mf": "projects/demo_din_sensor_unit/out/demo_din_sensor_unit_assembly.3mf",
+    "print_plate_3mf": "projects/demo_din_sensor_unit/out/demo_din_sensor_unit_print_plate.3mf",
+    "assembly_sheet_png": "projects/demo_din_sensor_unit/out/assembly_sheet.png",
+    "bom_md": "projects/demo_din_sensor_unit/out/bom.md",
+    "viewer_html": "projects/demo_din_sensor_unit/out/viewer.html"
+  }
+}

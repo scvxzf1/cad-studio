@@ -1,5 +1,15 @@
 """cad_kit: Agentic Structural CAD Toolkit (FDM / CNC / Exact)."""
 
+from .assembly import (
+    Assembly,
+    AssemblyNode,
+    HardwareBOMItem,
+    build_bom_data,
+    export_print_plate_3mf,
+    render_assembly_sheet,
+    run_assembly_build,
+    verify_assembly,
+)
 from .export_2d import export_2d_profile
 from .features import (
     FeatureAnchor,
@@ -17,6 +27,13 @@ from .features import (
 )
 from .inspector import inspect_cad_file, shape_to_trimesh
 from .mesh_ops import center_mesh_on_bed, modify_mesh
+from .printability import (
+    analyze_mesh_printability,
+    apply_optimal_orientation,
+    export_3mf,
+    rank_six_orientations,
+    render_printability_sheet,
+)
 from .renderer import compute_volumetric_diff, render_diff_sheet, render_preview_sheet
 from .templates import (
     BEARING_TABLE,
@@ -40,6 +57,8 @@ from .verify import verify_part_geometry
 from .viewer_html import export_viewer_html
 
 __all__ = [
+    "Assembly",
+    "AssemblyNode",
     "BEARING_TABLE",
     "EXTRUSION_SPECS",
     "EnclosureLayout",
@@ -50,12 +69,18 @@ __all__ = [
     "FastenerEntry",
     "FeatureAnchor",
     "FeatureRegistry",
+    "HardwareBOMItem",
     "ManufacturingMode",
     "ToleranceProfile",
+    "analyze_mesh_printability",
+    "apply_optimal_orientation",
+    "build_bom_data",
     "center_mesh_on_bed",
     "compute_volumetric_diff",
     "cut_panel_port",
     "export_2d_profile",
+    "export_3mf",
+    "export_print_plate_3mf",
     "export_viewer_html",
     "get_fastener",
     "inspect_cad_file",
@@ -76,10 +101,15 @@ __all__ = [
     "make_spur_gear",
     "make_tslot_tongue",
     "modify_mesh",
+    "rank_six_orientations",
+    "render_assembly_sheet",
     "render_diff_sheet",
     "render_preview_sheet",
+    "render_printability_sheet",
+    "run_assembly_build",
     "safe_chamfer",
     "safe_fillet",
     "shape_to_trimesh",
+    "verify_assembly",
     "verify_part_geometry",
 ]
