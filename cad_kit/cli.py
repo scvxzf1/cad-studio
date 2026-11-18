@@ -25,6 +25,12 @@ import time
 from typing import Any
 
 from .assembly import run_assembly_build
+from .ergonomics import (
+    diagnose_cad_exception,
+    get_workspace_status,
+    lookup_engineering_spec,
+    set_part_params,
+)
 from .export_2d import export_2d_profile
 from .inspector import format_inspection_markdown, inspect_cad_file
 from .printability import apply_optimal_orientation, export_3mf, rank_six_orientations, render_printability_sheet
@@ -404,6 +410,10 @@ def run_part_build(
 
     export_3mf([{"name": part_name, "shape": part, "color": "#3b82f6"}], threemf_path)
 
+    # Load tessellated mesh once from exported STL so verify/render/diff reuse it without re-tessellating B-Rep!
+    from .verify import load_any_as_trimesh
+    part_mesh = load_any_as_trimesh(stl_path)
+
     check = verify_part_geometry(part, expected_solids=exp_solids, ref_files=ref_files)
     for item in check.get("interferences", []):
         if "ref_file" in item:
@@ -411,7 +421,7 @@ def run_part_build(
 
     preview_png = od / "preview_sheet.png"
     render_preview_sheet(
-        target=part,
+        target=part_mesh,
         out_png=preview_png,
         title=part_name,
         mode=active_mode,
@@ -422,18 +432,20 @@ def run_part_build(
     diff_png: Path | None = None
     diff_stats: dict[str, Any] | None = None
     diff_meshes: dict[str, Any] | None = None
+    active_diff: dict[str, Any] | None = None
     if staging_old.exists():
-        cand_diff = compute_volumetric_diff(staging_old, stl_path)
+        cand_diff = compute_volumetric_diff(staging_old, part_mesh)
         if cand_diff["added_volume_mm3"] > 0.01 or cand_diff["removed_volume_mm3"] > 0.01:
             if save_snapshot:
                 shutil.copy2(staging_old, prev_stl)
+            active_diff = cand_diff
         staging_old.unlink(missing_ok=True)
 
     if gen_diff and prev_stl.exists():
-        raw_diff = compute_volumetric_diff(prev_stl, stl_path)
+        raw_diff = active_diff if active_diff is not None else compute_volumetric_diff(prev_stl, part_mesh)
         if raw_diff["added_volume_mm3"] > 0.01 or raw_diff["removed_volume_mm3"] > 0.01:
             diff_png = od / "diff_sheet.png"
-            render_diff_sheet(prev_stl, stl_path, diff_png, title=f"{part_name} 修改前后对比")
+            render_diff_sheet(prev_stl, part_mesh, diff_png, title=f"{part_name} 修改前后对比", precomputed_diff=raw_diff)
             diff_stats = {k: v for k, v in raw_diff.items() if not k.endswith("_mesh")}
             diff_meshes = raw_diff
 
@@ -531,22 +543,32 @@ def _cmd_init_part(args: argparse.Namespace) -> int:
 
 def _cmd_build(args: argparse.Namespace) -> int:
     sp = Path(args.script).expanduser().resolve()
-    mod = _load_part_module(sp)
-    if hasattr(mod, "build_assembly") and not hasattr(mod, "build"):
-        return _run_assembly_cli(sp, args.out_dir)
+    try:
+        mod = _load_part_module(sp)
+        if hasattr(mod, "build_assembly") and not hasattr(mod, "build"):
+            return _run_assembly_cli(sp, args.out_dir)
 
-    manifest = run_part_build(
-        script_path=sp,
-        mode=args.mode,
-        out_dir=args.out_dir,
-        gen_html=not args.no_html,
-        gen_diff=not args.no_diff,
-        save_snapshot=not args.no_snapshot,
-        expected_solids=args.expected_solids,
-        dxf_face=args.dxf,
-        print_check=args.print_check,
-        auto_orient=args.auto_orient,
-    )
+        manifest = run_part_build(
+            script_path=sp,
+            mode=args.mode,
+            out_dir=args.out_dir,
+            gen_html=not (args.no_html or args.fast),
+            gen_diff=not args.no_diff,
+            save_snapshot=not args.no_snapshot,
+            expected_solids=args.expected_solids,
+            dxf_face=args.dxf,
+            print_check=args.print_check,
+            auto_orient=args.auto_orient,
+        )
+    except Exception as exc:
+        diag = diagnose_cad_exception(exc, sp)
+        loc = diag.get("location") or {}
+        print(f"[✗] CAD 构建异常 ({diag['error_type']}): {diag['error_message']}")
+        if loc:
+            print(f"    定位代码 : {loc.get('file')}:{loc.get('lineno')} -> `{loc.get('code')}`")
+        print(f"    诊断建议 : {diag['diagnosis_cn']}")
+        return 1
+
     v = manifest["verification"]
     bb = v["bbox"]
     print(f"[✓] Built '{manifest['part_name']}' [mode={manifest['mode'].upper()}] in {manifest['elapsed_sec']}s")
@@ -827,6 +849,146 @@ def _cmd_open_slicer(args: argparse.Namespace) -> int:
     return 1
 
 
+PLUGIN_GLOBAL_RULE = """# CAD Studio Global Structural Modeling Guidelines
+
+当用户要求设计、测绘、修改或预览 3D 结构件（`.step` / `.stl` / `.3mf` / `.dxf`、机械支架、电子外壳、铝型材配件、齿轮轴承座等）时，遵循以下准则（处理与 3D 结构无关的普通软件项目时忽略本规则）：
+
+1. **优先调用热驻留 `cad-studio-mcp` 工具集**（免冷启动，1.5~2.5 秒极速出图）：
+   - 先用 `cad_status` 查看现有零件、可调参数（含中文注释）与特征锚点；
+   - 查螺丝/热熔螺母/轴承/型材尺寸或母版签名用 `cad_lookup_spec`；
+   - 微调尺寸优先用原子无损改参工具 `cad_set_params`（零语法错误风险）；
+   - 新建/全量构建用 `cad_init_project` 与 `cad_build`；接手外部 `.step`/`.stl` 必先跑 `cad_inspect`；打印前跑 `cad_print_check`。
+2. **统一方位语义协议**：
+   - 前(`Front`)=`-Y` ｜ 后(`Back`)=`+Y` ｜ 左(`Left`)=`-X` ｜ 右(`Right`)=`+X` ｜ 上(`Top`)=`+Z` ｜ 下(`Bottom`)=`-Z`（默认 `Z=0` 热床面）。
+3. **交付前强制多模态视觉自检**：
+   - 构建或改参后，必须调用 `read_file` 亲自查看生成的 `preview_sheet_png`（修改迭代时必看 `diff_sheet_png`），确认孔位打穿、方向正确且零干涉后再交付给用户。
+"""
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    studio_root = Path(__file__).resolve().parents[1]
+    target_root = Path.cwd() if (Path.cwd() / "projects").is_dir() else studio_root
+    st = get_workspace_status(target_root)
+    if args.json:
+        print(json.dumps(st, ensure_ascii=False, indent=2))
+        return 0
+    print(f"[CAD Studio] Root: {st['studio_root']}  |  Projects: {st['projects_count']}")
+    for p in st["projects"]:
+        ok_tag = "✓" if p.get("ok", True) else "✗"
+        bb = p.get("bbox_mm")
+        bb_str = f"{bb[0]}×{bb[1]}×{bb[2]} mm" if bb else "unbuilt"
+        print(f"\n  [{ok_tag}] {p['name']} ({p['kind']}, mode={p.get('mode', '-')})  BBox: {bb_str}  ->  {p['script']}")
+        if p.get("params"):
+            p_items = [f"{k}={v['value']}" + (f" ({v['comment'][:14]})" if v.get("comment") else "") for k, v in list(p["params"].items())[:8]]
+            print("      Params : " + " | ".join(p_items))
+        if p.get("anchors"):
+            print("      Anchors: " + ", ".join(p["anchors"][:8]))
+    return 0
+
+
+def _cmd_set_param(args: argparse.Namespace) -> int:
+    sp = Path(args.script).expanduser().resolve()
+    updates: dict[str, str] = {}
+    for item in args.assignments:
+        if "=" not in item:
+            print(f"[!] Invalid assignment '{item}', expected KEY=VALUE.")
+            return 1
+        k, v = item.split("=", 1)
+        updates[k.strip()] = v.strip()
+    try:
+        res = set_part_params(sp, updates)
+    except Exception as exc:
+        print(f"[✗] 参数更新失败: {exc}")
+        return 1
+
+    for k, chg in res["updated"].items():
+        print(f"[+] Param `{k}`: {chg['old']!r} -> {chg['new']!r}")
+
+    if args.build:
+        ns = argparse.Namespace(
+            script=str(sp),
+            mode=args.mode,
+            out_dir=None,
+            dxf=None,
+            print_check=False,
+            auto_orient=False,
+            no_html=False,
+            fast=args.fast,
+            no_diff=False,
+            no_snapshot=False,
+            expected_solids=None,
+        )
+        return _cmd_build(ns)
+    return 0
+
+
+def _cmd_lookup(args: argparse.Namespace) -> int:
+    print(json.dumps(lookup_engineering_spec(args.query), ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_install_plugin(args: argparse.Namespace) -> int:
+    studio_root = Path(__file__).resolve().parents[1]
+    python_bin = studio_root / ".venv" / "bin" / "python"
+    if not python_bin.exists():
+        python_bin = Path(sys.executable).resolve()
+
+    dst = Path(args.target_dir).expanduser().resolve()
+    (dst / "assets").mkdir(parents=True, exist_ok=True)
+    (dst / "rules").mkdir(parents=True, exist_ok=True)
+    (dst / "skills").mkdir(parents=True, exist_ok=True)
+
+    plugin_manifest = {
+        "name": "cad-studio",
+        "displayName": "CAD Studio (Structural STEP/STL/3MF)",
+        "version": "0.4.0",
+        "description": "Parametric STEP/STL/3MF structural CAD modeling, reverse inspection, 10-view blueprint, volumetric diff, DFM printability, multi-part assembly & hot MCP server.",
+        "logo": "assets/logo.svg",
+        "repository": "https://github.com/scvxzf1/cad-studio",
+        "suggestedPrompts": [
+            "帮我设计一个带子母止口、散热百叶和Type-C开口的分体电子外壳 (FDM打印公差)",
+            "体检这个现有的 .step / .stl 模型，提取所有孔位坐标与截面尺寸并改造安装耳",
+            "创建一个 2020 铝型材防转直角加强支架并检查 3D 打印最佳免支撑摆放朝向",
+        ],
+    }
+    (dst / "plugin.json").write_text(json.dumps(plugin_manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    mcp_cfg = {
+        "mcpServers": {
+            "cad-studio-mcp": {
+                "command": str(python_bin),
+                "args": ["-m", "cad_kit.mcp_server"],
+                "env": {
+                    "CAD_STUDIO_ROOT": str(studio_root),
+                },
+            }
+        }
+    }
+    (dst / "mcp_config.json").write_text(json.dumps(mcp_cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    logo_src = studio_root / "plugin_bundle" / "logo.svg"
+    if logo_src.exists():
+        shutil.copy2(logo_src, dst / "assets" / "logo.svg")
+
+    (dst / "rules" / "AGENTS.md").write_text(PLUGIN_GLOBAL_RULE, encoding="utf-8")
+
+    skill_src = studio_root / ".agents" / "skills" / "structural-cad"
+    skill_dst = dst / "skills" / "structural-cad"
+    if skill_dst.exists():
+        shutil.rmtree(skill_dst)
+    shutil.copytree(skill_src, skill_dst)
+
+    readme_src = studio_root / "README.md"
+    if readme_src.exists():
+        shutil.copy2(readme_src, dst / "README.md")
+
+    print(f"[✓] Installed global Antigravity Plugin `cad-studio` at: {dst}")
+    print(f"    Hot MCP Server : cad-studio-mcp -> {python_bin} -m cad_kit.mcp_server")
+    print(f"    Bundled Skill  : structural-cad")
+    print(f"    Manage in UI   : customization://{dst.name}")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="cad-cli", description="CAD Studio Unified Agentic Workflow CLI")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -907,9 +1069,31 @@ def main() -> None:
     p_rend.add_argument("--html", default=None, help="Optional interactive viewer.html output path")
     p_rend.set_defaults(func=_cmd_render)
 
-    p_slicer = sub.add_parser("open-slicer", help="Open STEP/STL directly in BambuStudio")
-    p_slicer.add_argument("file", help="Path to .step or .stl")
+    p_slicer = sub.add_parser("open-slicer", help="Open STEP/STL/3MF directly in BambuStudio")
+    p_slicer.add_argument("file", help="Path to .step / .stl / .3mf")
     p_slicer.set_defaults(func=_cmd_open_slicer)
+
+    p_build.add_argument("--fast", action="store_true", help="Fast iteration mode (skips regenerating viewer.html)")
+
+    p_stat = sub.add_parser("status", help="Show instant index of all projects, Params (with comments), and Feature Anchors")
+    p_stat.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_stat.set_defaults(func=_cmd_status)
+
+    p_setp = sub.add_parser("set-param", help="Atomically update Params in part.py (preserving comments) and optionally build")
+    p_setp.add_argument("script", help="Path to part.py")
+    p_setp.add_argument("assignments", nargs="+", help="Key=Value pairs, e.g. front_slot_w=20.0 back_wall_h=34.0")
+    p_setp.add_argument("--build", action="store_true", help="Immediately build & diff after updating Params")
+    p_setp.add_argument("--fast", action="store_true", help="Fast build (skip viewer.html)")
+    p_setp.add_argument("--mode", choices=["fdm", "cnc", "exact"], default=None)
+    p_setp.set_defaults(func=_cmd_set_param)
+
+    p_look = sub.add_parser("lookup", help="Instant lookup of fastener/bearing/extrusion specs & template signatures")
+    p_look.add_argument("query", nargs="?", default="", help="e.g. M3, 2020, 608, enclosure")
+    p_look.set_defaults(func=_cmd_lookup)
+
+    p_plug = sub.add_parser("install-plugin", help="Install CAD Studio + Hot MCP Server as a global Antigravity Plugin")
+    p_plug.add_argument("--target-dir", default="~/.gemini/config/plugins/cad-studio", help="Plugin destination directory")
+    p_plug.set_defaults(func=_cmd_install_plugin)
 
     args = parser.parse_args()
     sys.exit(args.func(args))

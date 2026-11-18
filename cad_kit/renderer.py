@@ -35,6 +35,25 @@ from .verify import load_any_as_trimesh, manifold_to_trimesh, trimesh_to_manifol
 
 pv.OFF_SCREEN = True
 
+# Persistent off-screen OpenGL Plotter pool keyed by window_size -> eliminates 14x context creation per build!
+_SHARED_PLOTTERS: dict[tuple[int, int], pv.Plotter] = {}
+
+
+def _get_shared_plotter(win_size: tuple[int, int]) -> pv.Plotter:
+    key = (int(win_size[0]), int(win_size[1]))
+    pl = _SHARED_PLOTTERS.get(key)
+    if pl is None or getattr(pl, "_closed", False):
+        pl = pv.Plotter(off_screen=True, window_size=key)
+        pl.enable_lightkit()
+        _SHARED_PLOTTERS[key] = pl
+    else:
+        pl.clear_actors()
+        try:
+            pl.hide_axes()
+        except Exception:
+            pass
+    return pl
+
 
 def trimesh_to_pv(mesh: trimesh.Trimesh) -> pv.PolyData:
     """Convert trimesh.Trimesh into PyVista PolyData with clean normals for sharp CAD shading."""
@@ -95,9 +114,8 @@ def _render_pv_ortho_rgba(
     ref_poly: pv.PolyData | None = None,
 ) -> np.ndarray:
     """Render an orthographic parallel-projected RGBA image with transparent background."""
-    pl = pv.Plotter(off_screen=True, window_size=win_size)
+    pl = _get_shared_plotter(win_size)
     pl.set_background("#ffffff")
-    pl.enable_lightkit()
 
     if ref_poly is not None and ref_poly.n_points > 0:
         pl.add_mesh(ref_poly, color="#94a3b8", opacity=0.22, smooth_shading=True)
@@ -130,7 +148,6 @@ def _render_pv_ortho_rgba(
     pl.camera.clipping_range = (0.1, dist * 3.0)
 
     rgba = pl.screenshot(transparent_background=True, return_img=True)
-    pl.close()
     return rgba
 
 
@@ -145,9 +162,8 @@ def _render_pv_special(
     ref_poly: pv.PolyData | None = None,
 ) -> np.ndarray:
     """Render Isometric, X-Ray, or Capped Section 3D views."""
-    pl = pv.Plotter(off_screen=True, window_size=win_size)
+    pl = _get_shared_plotter(win_size)
     pl.set_background("#f8fafc")
-    pl.enable_lightkit()
 
     if ref_poly is not None and ref_poly.n_points > 0 and mode in ("iso_top", "section"):
         pl.add_mesh(ref_poly, color="#cbd5e1", opacity=0.28, smooth_shading=True)
@@ -227,7 +243,6 @@ def _render_pv_special(
     pl.add_axes(line_width=2, color="#0f172a", xlabel="+X", ylabel="+Y", zlabel="+Z")
 
     img = pl.screenshot(transparent_background=False, return_img=True)
-    pl.close()
     return img
 
 
@@ -289,23 +304,43 @@ def render_preview_sheet(
 
     anchor_list = anchors or []
 
+    # Upload scene geometry ONCE to the ortho Plotter and capture all 6 orthographic cameras!
+    pl_ortho = _get_shared_plotter((win_w, win_h))
+    pl_ortho.set_background("#ffffff")
+    if ref_poly is not None and ref_poly.n_points > 0:
+        pl_ortho.add_mesh(ref_poly, color="#94a3b8", opacity=0.22, smooth_shading=True)
+        ref_edges = extract_cad_edges(ref_poly, 28.0)
+        if ref_edges.n_points > 0:
+            pl_ortho.add_mesh(ref_edges, color="#64748b", line_width=1.0, opacity=0.35)
+    if poly.n_points > 0:
+        pl_ortho.add_mesh(
+            poly,
+            color="#60a5fa",
+            specular=0.28,
+            specular_power=18,
+            ambient=0.32,
+            diffuse=0.72,
+            smooth_shading=True,
+        )
+    if edges.n_points > 0:
+        pl_ortho.add_mesh(edges, color="#0f172a", line_width=1.8)
+    pl_ortho.camera.enable_parallel_projection()
+    pl_ortho.camera.focal_point = tuple(float(x) for x in focal)
+
     for ax, spec in ortho_placement:
         ax.set_facecolor("#ffffff")
         span_h = float(bsize[spec.h_axis_idx])
         span_v = float(bsize[spec.v_axis_idx])
-        # Compute parallel_scale (world half-height) with comfortable margin for dimension callouts
         half_v_needed = max(span_v * 0.68, (span_h / aspect) * 0.68, 4.0)
 
-        rgba = _render_pv_ortho_rgba(
-            poly=poly,
-            edges=edges,
-            focal=focal,
-            cam_dir=spec.cam_dir,
-            up_dir=spec.up_dir,
-            parallel_scale=half_v_needed,
-            win_size=(win_w, win_h),
-            ref_poly=ref_poly,
-        )
+        cdir = np.asarray(spec.cam_dir, dtype=float)
+        cdir = cdir / (np.linalg.norm(cdir) + 1e-12)
+        dist = max(500.0, half_v_needed * 12.0)
+        pl_ortho.camera.position = tuple(float(x) for x in (focal + dist * cdir))
+        pl_ortho.camera.up = tuple(float(x) for x in spec.up_dir)
+        pl_ortho.camera.parallel_scale = float(half_v_needed)
+        pl_ortho.camera.clipping_range = (0.1, dist * 3.0)
+        rgba = pl_ortho.screenshot(transparent_background=True, return_img=True)
 
         # Screen coordinates u = h_sign * coord[h_axis], v = v_sign * coord[v_axis]
         fu = spec.h_sign * float(focal[spec.h_axis_idx])
@@ -452,7 +487,7 @@ def render_preview_sheet(
     plt.tight_layout(rect=[0.005, 0.055 if len(anchor_list) > 4 else (0.038 if anchor_list else 0.01), 0.995, 0.952])
     out_path = Path(out_png).expanduser().resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=150)
+    fig.savefig(out_path, dpi=150, pil_kwargs={"compress_level": 2})
     plt.close(fig)
     return out_path
 
@@ -511,10 +546,11 @@ def render_diff_sheet(
     new_target: Any,
     out_png: str | Path,
     title: str = "修改前后体积对比 (Diff)",
+    precomputed_diff: dict[str, Any] | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Render a 4-panel Red/Green Volumetric Boolean Diff Sheet (`diff_sheet.png`)."""
     _configure_cjk_font()
-    diff = compute_volumetric_diff(old_target, new_target)
+    diff = precomputed_diff if precomputed_diff is not None else compute_volumetric_diff(old_target, new_target)
 
     pv_unchanged = trimesh_to_pv(diff["unchanged_mesh"])
     pv_added = trimesh_to_pv(diff["added_mesh"])
@@ -549,38 +585,33 @@ def render_diff_sheet(
     )
     fig.suptitle(summary, fontsize=11.5, fontweight="bold", color="#0f172a", y=0.975)
 
+    # Upload diff meshes ONCE to shared Plotter and capture all 4 camera angles!
+    pl_diff = _get_shared_plotter((720, 540))
+    pl_diff.set_background("#ffffff")
+    if pv_unchanged.n_points > 0:
+        pl_diff.add_mesh(pv_unchanged, color="#94a3b8", opacity=0.22, smooth_shading=True)
+    if edges_unchanged.n_points > 0:
+        pl_diff.add_mesh(edges_unchanged, color="#94a3b8", line_width=0.9, opacity=0.35)
+    if pv_added.n_points > 0:
+        pl_diff.add_mesh(pv_added, color="#10b981", opacity=0.92, specular=0.3, smooth_shading=True)
+    if edges_added.n_points > 0:
+        pl_diff.add_mesh(edges_added, color="#064e3b", line_width=1.8)
+    if pv_removed.n_points > 0:
+        pl_diff.add_mesh(pv_removed, color="#ef4444", opacity=0.45, smooth_shading=True)
+    if edges_removed.n_points > 0:
+        pl_diff.add_mesh(edges_removed, color="#991b1b", line_width=1.6)
+    pl_diff.camera.enable_parallel_projection()
+    pl_diff.camera.focal_point = tuple(float(x) for x in focal)
+    pl_diff.camera.parallel_scale = diag * 0.56
+    pl_diff.add_axes(line_width=2, color="#0f172a", xlabel="+X", ylabel="+Y", zlabel="+Z")
+
     for ax, (vtitle, cdir_raw, up) in zip(axes.flat, cam_views):
-        pl = pv.Plotter(off_screen=True, window_size=(720, 540))
-        pl.set_background("#ffffff")
-        pl.enable_lightkit()
-
-        if pv_unchanged.n_points > 0:
-            pl.add_mesh(pv_unchanged, color="#94a3b8", opacity=0.22, smooth_shading=True)
-        if edges_unchanged.n_points > 0:
-            pl.add_mesh(edges_unchanged, color="#94a3b8", line_width=0.9, opacity=0.35)
-
-        if pv_added.n_points > 0:
-            pl.add_mesh(pv_added, color="#10b981", opacity=0.92, specular=0.3, smooth_shading=True)
-        if edges_added.n_points > 0:
-            pl.add_mesh(edges_added, color="#064e3b", line_width=1.8)
-
-        if pv_removed.n_points > 0:
-            pl.add_mesh(pv_removed, color="#ef4444", opacity=0.45, smooth_shading=True)
-        if edges_removed.n_points > 0:
-            pl.add_mesh(edges_removed, color="#991b1b", line_width=1.6)
-
         cdir = np.asarray(cdir_raw, dtype=float)
         cdir = cdir / np.linalg.norm(cdir)
         dist = max(250.0, diag * 2.8)
-        pl.camera.enable_parallel_projection()
-        pl.camera.focal_point = tuple(float(x) for x in focal)
-        pl.camera.position = tuple(float(x) for x in (focal + dist * cdir))
-        pl.camera.up = up
-        pl.camera.parallel_scale = diag * 0.56
-        pl.add_axes(line_width=2, color="#0f172a", xlabel="+X", ylabel="+Y", zlabel="+Z")
-
-        img = pl.screenshot(transparent_background=False, return_img=True)
-        pl.close()
+        pl_diff.camera.position = tuple(float(x) for x in (focal + dist * cdir))
+        pl_diff.camera.up = up
+        img = pl_diff.screenshot(transparent_background=False, return_img=True)
 
         ax.imshow(img)
         ax.set_title(vtitle, fontsize=10.5, fontweight="bold", color="#0f172a")
@@ -592,7 +623,7 @@ def render_diff_sheet(
     plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.92])
     out_path = Path(out_png).expanduser().resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=150)
+    fig.savefig(out_path, dpi=150, pil_kwargs={"compress_level": 2})
     plt.close(fig)
 
     stats = {k: v for k, v in diff.items() if not k.endswith("_mesh")}

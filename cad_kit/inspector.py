@@ -25,8 +25,14 @@ import trimesh
 from .tolerances import FASTENER_TABLE
 
 
+_CJK_FONT_CACHE: str | None = None
+
+
 def _configure_cjk_font() -> str:
-    """Configure matplotlib to render Chinese labels cleanly on Linux."""
+    """Configure matplotlib to render Chinese labels cleanly on Linux (cached once per process)."""
+    global _CJK_FONT_CACHE
+    if _CJK_FONT_CACHE is not None:
+        return _CJK_FONT_CACHE
     preferred_paths = [
         "/usr/share/fonts/adobe-source-han-sans/SourceHanSansCN-Regular.otf",
         "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
@@ -39,9 +45,11 @@ def _configure_cjk_font() -> str:
             name = prop.get_name()
             plt.rcParams["font.sans-serif"] = [name, "DejaVu Sans"]
             plt.rcParams["axes.unicode_minus"] = False
+            _CJK_FONT_CACHE = name
             return name
     plt.rcParams["axes.unicode_minus"] = False
-    return "DejaVu Sans"
+    _CJK_FONT_CACHE = "DejaVu Sans"
+    return _CJK_FONT_CACHE
 
 
 def _guess_fastener_hint(diameter: float, is_hole: bool) -> str:

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <!-- 10% safe margin around 28..228; high contrast isometric CAD solid + XYZ caliper ticks -->
+  <!-- Top face (+Z) -->
+  <polygon points="128,36 212,84 128,132 44,84" fill="#60A5FA" stroke="#0F172A" stroke-width="8" stroke-linejoin="round"/>
+  <!-- Left Front face (-Y) -->
+  <polygon points="44,84 128,132 128,220 44,172" fill="#3B82F6" stroke="#0F172A" stroke-width="8" stroke-linejoin="round"/>
+  <!-- Right face (+X) -->
+  <polygon points="128,132 212,84 212,172 128,220" fill="#1D4ED8" stroke="#0F172A" stroke-width="8" stroke-linejoin="round"/>
+  <!-- Counterbore precision hole on top face -->
+  <ellipse cx="128" cy="84" rx="26" ry="15" fill="#0F172A" stroke="#F8FAFC" stroke-width="5"/>
+  <ellipse cx="128" cy="88" rx="12" ry="7" fill="#F97316"/>
+  <!-- Glowing dimension caliper accent -->
+  <line x1="52" y1="196" x2="118" y2="232" stroke="#10B981" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="52" cy="196" r="7" fill="#10B981"/>
+  <circle cx="118" cy="232" r="7" fill="#10B981"/>
+</svg>

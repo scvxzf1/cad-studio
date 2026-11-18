@@ -1,17 +1,19 @@
 {
   "part_name": "demo_iot_enclosure",
   "mode": "fdm",
-  "elapsed_sec": 18.59,
+  "elapsed_sec": 13.08,
   "files": {
     "script": "projects/demo_iot_enclosure/part.py",
     "step": "projects/demo_iot_enclosure/out/demo_iot_enclosure.step",
     "stl": "projects/demo_iot_enclosure/out/demo_iot_enclosure.stl",
+    "threemf": "projects/demo_iot_enclosure/out/demo_iot_enclosure.3mf",
     "preview_sheet_png": "projects/demo_iot_enclosure/out/preview_sheet.png",
     "diff_sheet_png": null,
+    "printability_sheet_png": null,
     "viewer_html": "projects/demo_iot_enclosure/out/viewer.html",
-    "dxf": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy.dxf",
-    "svg": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy.svg",
-    "drawing_2d_png": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy_2d.png"
+    "dxf": null,
+    "svg": null,
+    "drawing_2d_png": null
   },
   "params": {
     "outer_x": 86.0,
@@ -270,42 +272,6 @@
     "warnings": []
   },
   "diff": null,
-  "export_2d": {
-    "plane": "XY",
-    "offset_mm": 0.9,
-    "outer_size_mm": [
-      108.0,
-      128.0
-    ],
-    "analytic_brep": true,
-    "holes": [
-      {
-        "id": "C1",
-        "x_mm": -36.67,
-        "y_mm": 47.33,
-        "diameter_mm": 6.25
-      },
-      {
-        "id": "C2",
-        "x_mm": 36.67,
-        "y_mm": 47.33,
-        "diameter_mm": 6.25
-      },
-      {
-        "id": "C3",
-        "x_mm": -36.67,
-        "y_mm": 92.67,
-        "diameter_mm": 6.25
-      },
-      {
-        "id": "C4",
-        "x_mm": 36.67,
-        "y_mm": 92.67,
-        "diameter_mm": 6.25
-      }
-    ],
-    "dxf": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy.dxf",
-    "svg": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy.svg",
-    "drawing_png": "projects/demo_iot_enclosure/out/demo_iot_enclosure_bottom_xy_2d.png"
-  }
+  "printability": null,
+  "export_2d": null
 }

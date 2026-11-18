@@ -30,9 +30,12 @@ from .renderer import extract_cad_edges, trimesh_to_pv
 from .verify import load_any_as_trimesh
 
 
+def _encode_bytes(arr: np.ndarray) -> str:
+    return base64.b64encode(np.ascontiguousarray(arr).tobytes()).decode("ascii")
+
+
 def _encode_f32(arr: np.ndarray) -> str:
-    a = np.ascontiguousarray(arr, dtype=np.float32)
-    return base64.b64encode(a.tobytes()).decode("ascii")
+    return _encode_bytes(np.asarray(arr, dtype=np.float32))
 
 
 def _load_viewer_mesh(target: Any) -> trimesh.Trimesh:
@@ -60,16 +63,20 @@ def _pack_mesh_layer(
     if mesh is None or len(mesh.faces) == 0:
         return None
     poly = trimesh_to_pv(mesh).triangulate()
-    faces = poly.faces.reshape(-1, 4)[:, 1:4]
+    faces = np.asarray(poly.faces.reshape(-1, 4)[:, 1:4], dtype=np.uint32)
     pts = np.asarray(poly.points, dtype=np.float32)
-    tri_pos = pts[faces].reshape(-1, 3)
 
-    if "Normals" in poly.point_data:
+    if "Normals" in poly.point_data and len(poly.point_data["Normals"]) == len(pts):
         nrms = np.asarray(poly.point_data["Normals"], dtype=np.float32)
-        tri_nrm = nrms[faces].reshape(-1, 3)
     else:
-        fn = np.asarray(mesh.face_normals, dtype=np.float32)
-        tri_nrm = np.repeat(fn, 3, axis=0)
+        poly_n = poly.compute_normals(point_normals=True, cell_normals=False, split_vertices=True)
+        pts = np.asarray(poly_n.points, dtype=np.float32)
+        faces = np.asarray(poly_n.faces.reshape(-1, 4)[:, 1:4], dtype=np.uint32)
+        nrms = np.asarray(poly_n.point_data["Normals"], dtype=np.float32)
+
+    nrm_i8 = np.clip(np.round(nrms * 127.0), -127, 127).astype(np.int8)
+    use_u16 = len(pts) < 65535
+    idx_arr = faces.ravel().astype(np.uint16 if use_u16 else np.uint32)
 
     edges_pv = extract_cad_edges(poly, angle=24.0)
     edge_pts = np.zeros((0, 3), dtype=np.float32)
@@ -98,9 +105,11 @@ def _pack_mesh_layer(
         "visible": bool(visible),
         "explodeVec": [round(float(x), 3) for x in explode_vec],
         "center": center_pt,
-        "vertCount": int(len(tri_pos)),
-        "posB64": _encode_f32(tri_pos),
-        "nrmB64": _encode_f32(tri_nrm),
+        "vertCount": int(len(idx_arr)),
+        "u16": bool(use_u16),
+        "uPosB64": _encode_f32(pts),
+        "uNrmI8B64": _encode_bytes(nrm_i8),
+        "triIdxB64": _encode_bytes(idx_arr),
         "edgeVertCount": int(len(edge_pts)),
         "edgeB64": _encode_f32(edge_pts),
     }
@@ -305,12 +314,36 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <script>
 const CAD_DATA = __CAD_JSON__;
 
-function b64ToF32(b64) {
-  if (!b64) return new Float32Array(0);
+function b64ToBytes(b64) {
+  if (!b64) return new Uint8Array(0);
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new Float32Array(bytes.buffer);
+  return bytes;
+}
+function b64ToF32(b64) {
+  const b = b64ToBytes(b64);
+  return new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4);
+}
+function unpackIndexedLayer(ly) {
+  if (ly.posB64) return { posArr: b64ToF32(ly.posB64), nrmArr: b64ToF32(ly.nrmB64) };
+  const uPos = b64ToF32(ly.uPosB64);
+  const nrmBytes = b64ToBytes(ly.uNrmI8B64);
+  const uNrm = new Int8Array(nrmBytes.buffer, nrmBytes.byteOffset, nrmBytes.byteLength);
+  const idxBytes = b64ToBytes(ly.triIdxB64);
+  const idxArr = ly.u16
+    ? new Uint16Array(idxBytes.buffer, idxBytes.byteOffset, idxBytes.byteLength / 2)
+    : new Uint32Array(idxBytes.buffer, idxBytes.byteOffset, idxBytes.byteLength / 4);
+  const n = idxArr.length;
+  const posArr = new Float32Array(n * 3);
+  const nrmArr = new Float32Array(n * 3);
+  const inv127 = 1.0 / 127.0;
+  for (let i = 0; i < n; i++) {
+    const vi = idxArr[i] * 3, oi = i * 3;
+    posArr[oi]   = uPos[vi];     posArr[oi+1] = uPos[vi+1];   posArr[oi+2] = uPos[vi+2];
+    nrmArr[oi]   = uNrm[vi]*inv127; nrmArr[oi+1] = uNrm[vi+1]*inv127; nrmArr[oi+2] = uNrm[vi+2]*inv127;
+  }
+  return { posArr, nrmArr };
 }
 
 // 4x4 Column-Major Matrix Helpers + Exact Matrix Inverse for Unproject Raycasting
@@ -509,8 +542,7 @@ const progLine = compileProg(VS_LINE, FS_LINE);
 
 // Keep CPU Float32 arrays alongside GPU buffers for exact raycasting & vertex/edge snapping!
 const gpuLayers = CAD_DATA.layers.map((ly) => {
-  const posArr = b64ToF32(ly.posB64);
-  const nrmArr = b64ToF32(ly.nrmB64);
+  const { posArr, nrmArr } = unpackIndexedLayer(ly);
   const edgeArr = b64ToF32(ly.edgeB64);
 
   const posBuf = gl.createBuffer();

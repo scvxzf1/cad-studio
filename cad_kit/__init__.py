@@ -1,5 +1,7 @@
 """cad_kit: Agentic Structural CAD Toolkit (FDM / CNC / Exact)."""
 
+__version__ = "0.4.0"
+
 from .assembly import (
     Assembly,
     AssemblyNode,

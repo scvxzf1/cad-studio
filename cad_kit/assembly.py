@@ -31,7 +31,7 @@ import trimesh
 from .features import FeatureRegistry
 from .inspector import _configure_cjk_font
 from .printability import apply_optimal_orientation, export_3mf, rank_six_orientations
-from .renderer import extract_cad_edges, trimesh_to_pv
+from .renderer import _get_shared_plotter, extract_cad_edges, trimesh_to_pv
 from .tolerances import ManufacturingMode
 from .verify import load_any_as_trimesh, manifold_to_trimesh, trimesh_to_manifold
 from .viewer_html import export_viewer_html
@@ -360,9 +360,8 @@ def render_assembly_sheet(asm: Assembly, out_png: str | Path) -> Path:
     ]
 
     for ax, ptitle, cdir_raw, up, fc, pscale, escale, sec_y in panel_configs:
-        pl = pv.Plotter(off_screen=True, window_size=(720, 540))
+        pl = _get_shared_plotter((720, 540))
         pl.set_background("#ffffff")
-        pl.enable_lightkit()
         _add_assembly_actors(pl, explode_scale=escale, section_y=sec_y)
 
         cdir = np.asarray(cdir_raw, dtype=float)
@@ -376,7 +375,6 @@ def render_assembly_sheet(asm: Assembly, out_png: str | Path) -> Path:
         pl.add_axes(line_width=2, color="#0f172a", xlabel="+X", ylabel="+Y", zlabel="+Z")
 
         img = pl.screenshot(return_img=True)
-        pl.close()
 
         ax.imshow(img)
         ax.set_title(ptitle, fontsize=10.2, fontweight="bold", color="#0f172a")
@@ -405,7 +403,7 @@ def render_assembly_sheet(asm: Assembly, out_png: str | Path) -> Path:
     plt.tight_layout(rect=[0.008, 0.042, 0.992, 0.945])
     out_path = Path(out_png).expanduser().resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=150)
+    fig.savefig(out_path, dpi=150, pil_kwargs={"compress_level": 2})
     plt.close(fig)
     return out_path
 

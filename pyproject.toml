@@ -1,7 +1,7 @@
 [project]
 name = "cad-studio"
-version = "0.1.0"
-description = "Agentic Structural CAD Studio: STEP/STL parametric modeling, reverse inspection, 10-view engineering preview, volumetric diff, and interactive 3D viewer."
+version = "0.4.0"
+description = "Agentic Structural CAD Studio: STEP/STL/3MF parametric modeling, reverse inspection, 10-view blueprint, volumetric diff, DFM printability, multi-part assembly & hot MCP server."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -16,10 +16,12 @@ dependencies = [
     "matplotlib>=3.9.0",
     "pillow>=10.4.0",
     "numpy>=1.26.0",
+    "mcp>=2.0.0",
 ]
 
 [project.scripts]
 cad-cli = "cad_kit.cli:main"
+cad-mcp = "cad_kit.mcp_server:main"
 
 [build-system]
 requires = ["hatchling"]

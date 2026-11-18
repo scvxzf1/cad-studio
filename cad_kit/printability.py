@@ -28,7 +28,7 @@ from scipy.sparse.csgraph import connected_components
 import trimesh
 
 from .inspector import _configure_cjk_font, shape_to_trimesh
-from .renderer import extract_cad_edges
+from .renderer import _get_shared_plotter, extract_cad_edges
 from .verify import load_any_as_trimesh
 
 pv.OFF_SCREEN = True
@@ -370,9 +370,8 @@ def render_printability_sheet(
     ]
 
     for ax, vtitle, cdir_raw, up in cam_specs:
-        pl = pv.Plotter(off_screen=True, window_size=(700, 520))
+        pl = _get_shared_plotter((700, 520))
         pl.set_background("#ffffff")
-        pl.enable_lightkit()
         pl.add_mesh(poly, scalars="RGB", rgb=True, preference="cell", ambient=0.42, diffuse=0.65)
         if edges.n_points > 0:
             pl.add_mesh(edges, color="#0f172a", line_width=1.6)
@@ -391,7 +390,6 @@ def render_printability_sheet(
         pl.camera.parallel_scale = diag * 0.56
         pl.add_axes(line_width=2, color="#0f172a", xlabel="+X", ylabel="+Y", zlabel="+Z")
         img = pl.screenshot(return_img=True)
-        pl.close()
 
         ax.imshow(img)
         ax.set_title(vtitle, fontsize=10.2, fontweight="bold", color="#0f172a")

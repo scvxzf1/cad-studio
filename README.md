@@ -24,6 +24,9 @@
    - 自动检测 **半空无支撑孤岛（必炒面预警）**、**`>55°` 重度悬垂区** 与 **首层热床着床面积**，自动评估 `±X / ±Y / ±Z` 六个朝向评分并支持 `--auto-orient` 一键旋转到最佳免支撑姿态导出命名彩色 `.3mf`。
 7. **多零件总装系统 (`Assembly`) + 动态爆炸滑块 + 紧固件 BOM 清单 (`v0.3`)**：
    - 支持多件彩色总装、**N×N 全矩阵三维碰撞与最小表面间隙体检**、**6 视图爆炸拆解与彩色剖面图**、自动统计耗材克重与紧固件采购 BOM，并一键生成**自动滤除参考件、自动翻平排好盘的 `<name>_print_plate.3mf`**。
+8. **热驻留 MCP Server + 全局 Antigravity Plugin + 原子级无损改参 (`v0.4`)**：
+   - 内置常驻内存的 **`cad-studio-mcp` 服务**（共享离屏 OpenGL 上下文复用，免除每次 `OpenCASCADE + VTK` 冷加载，热改参出图提速数倍）与一键全局插件安装器 `uv run cad-cli install-plugin`；
+   - 提供 AST 级无损改参 `set-param` / `cad_set_params`（保留源码中文注释，零语法错误风险）、全局索引 `status`、标准件速查 `lookup`、OCCT 中文报错定位，以及顶点索引压缩版 `viewer.html`。
 
 ---
 
@@ -73,6 +76,14 @@
 ```bash
 cd cad-studio
 uv sync
+
+# 0. 一键安装为本机全局 Antigravity Plugin（自动挂载热驻留 cad-studio-mcp 工具服务，跨工作区随处可用！）
+uv run cad-cli install-plugin
+
+# 0.5 全局项目状态速览 / AST 原子无损改参构建 / 标准件速查
+uv run cad-cli status
+uv run cad-cli set-param projects/demo_sensor_bracket/part.py front_slot_w=18.0 --build
+uv run cad-cli lookup M3
 
 # 1. 新建零件工作目录（支持 --template: basic | enclosure | extrusion-bracket | din-clip | gear）
 uv run cad-cli init-part my_box --template enclosure --mode fdm

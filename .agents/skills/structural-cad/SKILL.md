@@ -12,9 +12,24 @@ description: >-
 
 ---
 
-## 一、 常用 CLI 命令速查（在 `cad-studio` 仓库根目录下执行）
+## 零、 优先使用热驻留 MCP 工具 (`cad-studio-mcp`) — 提速 5~8 倍！
+
+如果当前会话已挂载 `cad-studio-mcp`（全局插件开启时自动注入），**请优先直接调用以下原生 MCP 工具**，免除 Python/OpenCASCADE 冷启动开销（单次迭代约 `1.5~2.5s`）：
+- **`cad_status()`**：0.1s 列出所有项目、`Params` 参数表（含中文注释）与特征锚点（`H1/S1`）；
+- **`cad_lookup_spec(query="M3" | "2020" | "608" | "enclosure")`**：即时查紧固件/轴承/型材尺寸与母版签名，无需通读参考大文档；
+- **`cad_set_params(script_path, updates={"front_slot_w": 20.0}, fast=False)`**：**微调尺寸首选！** AST 级安全改参（保留源码注释、零语法错误风险）并自动完成热重构与红绿 Diff 出图；
+- **`cad_init_project(...)` / `cad_build(...)` / `cad_inspect(...)` / `cad_print_check(...)` / `cad_export_2d(...)`**：对应全套新建、构建、逆向体检、DFM 悬垂扫描与 1:1 DXF 导出。
+
+---
+
+## 一、 常用 CLI 命令速查（无 MCP 时在 `cad-studio` 仓库根目录下执行）
 
 ```bash
+# 0. 全局状态速览 / 原子无损改参构建 / 查标准件表
+uv run cad-cli status
+uv run cad-cli set-param projects/<name>/part.py front_slot_w=20.0 --build
+uv run cad-cli lookup M3
+
 # 1. 初始化新零件目录 projects/<name>/part.py（支持 --template: basic | enclosure | extrusion-bracket | din-clip | gear）
 uv run cad-cli init-part <name> --template basic --mode fdm --ref /path/to/ref.step
 
