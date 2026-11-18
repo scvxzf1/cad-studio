@@ -1,0 +1,12 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# CAD temporary & previous build caches
+**/out/.prev/
+**/out/*.tmp.*
+.DS_Store

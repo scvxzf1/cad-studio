@@ -1,0 +1,139 @@
+{
+  "file": "projects/demo_sensor_bracket/refs/sensor_module.stl",
+  "format": "STL",
+  "representation": "Triangle Mesh",
+  "triangles_count": 1552,
+  "is_watertight": true,
+  "volume_mm3": 4493.07,
+  "area_mm2": 2720.44,
+  "bbox": {
+    "min_mm": [
+      -18.0,
+      -12.0,
+      9.5
+    ],
+    "max_mm": [
+      18.0,
+      15.0,
+      21.0
+    ],
+    "size_mm": [
+      36.0,
+      27.0,
+      11.5
+    ],
+    "center_mm": [
+      0.0,
+      1.5,
+      15.25
+    ]
+  },
+  "major_planes": [
+    {
+      "orientation": "-Z (下)",
+      "coord_mm": 12.0,
+      "area_mm2": 869.92
+    },
+    {
+      "orientation": "+Z (上)",
+      "coord_mm": 16.0,
+      "area_mm2": 787.24
+    },
+    {
+      "orientation": "-Y (前)",
+      "coord_mm": -11.0,
+      "area_mm2": 144.0
+    },
+    {
+      "orientation": "+Y (后)",
+      "coord_mm": 15.0,
+      "area_mm2": 144.0
+    },
+    {
+      "orientation": "+Z (上)",
+      "coord_mm": 21.0,
+      "area_mm2": 132.68
+    },
+    {
+      "orientation": "-X (左)",
+      "coord_mm": -18.0,
+      "area_mm2": 104.0
+    },
+    {
+      "orientation": "+X (右)",
+      "coord_mm": 18.0,
+      "area_mm2": 104.0
+    },
+    {
+      "orientation": "-Z (下)",
+      "coord_mm": 9.5,
+      "area_mm2": 60.0
+    },
+    {
+      "orientation": "+Y (后)",
+      "coord_mm": -6.0,
+      "area_mm2": 25.0
+    },
+    {
+      "orientation": "-Y (前)",
+      "coord_mm": -12.0,
+      "area_mm2": 25.0
+    },
+    {
+      "orientation": "+X (右)",
+      "coord_mm": 5.0,
+      "area_mm2": 15.0
+    },
+    {
+      "orientation": "-X (左)",
+      "coord_mm": -5.0,
+      "area_mm2": 15.0
+    },
+    {
+      "orientation": "+Y (后)",
+      "coord_mm": 4.5,
+      "area_mm2": 11.34
+    },
+    {
+      "orientation": "-Y (前)",
+      "coord_mm": -8.5,
+      "area_mm2": 11.34
+    },
+    {
+      "orientation": "+Z (上)",
+      "coord_mm": 12.0,
+      "area_mm2": 10.0
+    }
+  ],
+  "cylindrical_features": [
+    {
+      "type": "hole (STL截面拟合内孔)",
+      "axis": "Z",
+      "center_mm": [
+        -13.0,
+        5.0,
+        14.387
+      ],
+      "diameter_mm": 3.2,
+      "hint": "M3通孔(精) / M2热熔螺母孔",
+      "sampled_span_mm": 1.725
+    },
+    {
+      "type": "hole (STL截面拟合内孔)",
+      "axis": "Z",
+      "center_mm": [
+        13.0,
+        5.0,
+        14.387
+      ],
+      "diameter_mm": 3.2,
+      "hint": "M3通孔(精) / M2热熔螺母孔",
+      "sampled_span_mm": 1.725
+    }
+  ],
+  "origin_diagnostics": [
+    "注意: XY 中心偏移在 (0.0, 1.5) mm，修改/打孔时请以实际坐标为准或先平移对齐！",
+    "注意: 底面位于 Z = 9.5 mm (非 Z=0)"
+  ],
+  "slices_png": "projects/demo_sensor_bracket/refs/inspect_sensor_module/sensor_module_inspect_slices.png"
+}
