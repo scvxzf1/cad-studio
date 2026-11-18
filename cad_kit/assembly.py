@@ -373,7 +373,7 @@ def render_assembly_sheet(asm: Assembly, out_png: str | Path) -> Path:
         pl.camera.up = up
         pl.camera.parallel_scale = pscale
         pl.add_axes(line_width=2, color="#0f172a", xlabel="+X", ylabel="+Y", zlabel="+Z")
-
+        pl.render()
         img = pl.screenshot(return_img=True)
 
         ax.imshow(img)

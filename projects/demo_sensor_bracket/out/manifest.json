@@ -1,7 +1,7 @@
 {
   "part_name": "demo_sensor_bracket",
   "mode": "fdm",
-  "elapsed_sec": 9.32,
+  "elapsed_sec": 9.83,
   "files": {
     "script": "projects/demo_sensor_bracket/part.py",
     "step": "projects/demo_sensor_bracket/out/demo_sensor_bracket.step",
@@ -10,7 +10,7 @@
     "preview_sheet_png": "projects/demo_sensor_bracket/out/preview_sheet.png",
     "diff_sheet_png": "projects/demo_sensor_bracket/out/diff_sheet.png",
     "printability_sheet_png": null,
-    "viewer_html": "projects/demo_sensor_bracket/out/viewer.html",
+    "viewer_html": null,
     "dxf": null,
     "svg": null,
     "drawing_2d_png": null

@@ -45,6 +45,7 @@ def _get_shared_plotter(win_size: tuple[int, int]) -> pv.Plotter:
     if pl is None or getattr(pl, "_closed", False):
         pl = pv.Plotter(off_screen=True, window_size=key)
         pl.enable_lightkit()
+        pl.render()  # Clear VTK _first_time auto-camera-reset flag once at creation!
         _SHARED_PLOTTERS[key] = pl
     else:
         pl.clear_actors()
@@ -241,7 +242,7 @@ def _render_pv_special(
     pl.camera.up = up
     pl.camera.parallel_scale = max(diag * 0.56, 2.0)
     pl.add_axes(line_width=2, color="#0f172a", xlabel="+X", ylabel="+Y", zlabel="+Z")
-
+    pl.render()
     img = pl.screenshot(transparent_background=False, return_img=True)
     return img
 
@@ -340,6 +341,7 @@ def render_preview_sheet(
         pl_ortho.camera.up = tuple(float(x) for x in spec.up_dir)
         pl_ortho.camera.parallel_scale = float(half_v_needed)
         pl_ortho.camera.clipping_range = (0.1, dist * 3.0)
+        pl_ortho.render()
         rgba = pl_ortho.screenshot(transparent_background=True, return_img=True)
 
         # Screen coordinates u = h_sign * coord[h_axis], v = v_sign * coord[v_axis]
@@ -611,6 +613,7 @@ def render_diff_sheet(
         dist = max(250.0, diag * 2.8)
         pl_diff.camera.position = tuple(float(x) for x in (focal + dist * cdir))
         pl_diff.camera.up = up
+        pl_diff.render()
         img = pl_diff.screenshot(transparent_background=False, return_img=True)
 
         ax.imshow(img)

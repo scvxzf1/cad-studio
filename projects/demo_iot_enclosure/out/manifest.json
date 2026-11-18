@@ -1,7 +1,7 @@
 {
   "part_name": "demo_iot_enclosure",
   "mode": "fdm",
-  "elapsed_sec": 13.08,
+  "elapsed_sec": 11.54,
   "files": {
     "script": "projects/demo_iot_enclosure/part.py",
     "step": "projects/demo_iot_enclosure/out/demo_iot_enclosure.step",
@@ -10,7 +10,7 @@
     "preview_sheet_png": "projects/demo_iot_enclosure/out/preview_sheet.png",
     "diff_sheet_png": null,
     "printability_sheet_png": null,
-    "viewer_html": "projects/demo_iot_enclosure/out/viewer.html",
+    "viewer_html": null,
     "dxf": null,
     "svg": null,
     "drawing_2d_png": null
